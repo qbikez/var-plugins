@@ -18,12 +18,18 @@ const COLORS: Record<AgentStatus, Rgb> = {
   working: [0, 64, 255],
   blocked: [255, 140, 0],
   done: [0, 255, 0],
-  idle: [40, 0, 60],
+  idle: [120, 0, 180],
   unknown: [0, 0, 0],
 };
 const OFF: Rgb = [0, 0, 0];
 // What each zone of a machine's half indicates, left → right.
 const INDICATORS: AgentStatus[] = ["blocked", "working", "done", "idle"];
+// A lit zone's brightness is the share of the machine's agents in that state, floored so one agent out of many stays visible.
+const MIN_BRIGHTNESS = 0.2;
+const dim = (rgb: Rgb, share: number): Rgb => {
+  const k = MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * share;
+  return rgb.map((c) => Math.round(c * k)) as Rgb;
+};
 
 const socketPath = process.env.HERDR_SOCKET_PATH;
 if (!socketPath) throw new Error("HERDR_SOCKET_PATH not set (run inside herdr)");
@@ -172,8 +178,8 @@ let lastPublished = "";
 // Every known agent status on this machine, sorted so unchanged state publishes identically.
 const localStatuses = () => [...panes.values()].map((p) => p.status).filter((s) => s !== "unknown").sort();
 
-// Zone z belongs to slot floor(z / slotZones) and lights when any of that machine's agents is in INDICATORS[z % slotZones].
-// Our own slot comes from local state, the others from the hub.
+// Zone z belongs to slot floor(z / slotZones) and lights when any of that machine's agents is in INDICATORS[z % slotZones],
+// brighter the larger their share. Our own slot comes from local state, the others from the hub.
 function frame(): { colors: Rgb[]; legend: string } {
   const local = localStatuses();
   const colors: Rgb[] = [];
@@ -181,8 +187,8 @@ function frame(): { colors: Rgb[]; legend: string } {
   for (let s = 0; s < MACHINES; s++) {
     const statuses = s === slot ? local : (remote.get(s) ?? []);
     const counts = INDICATORS.map((ind) => statuses.filter((st) => st === ind).length);
-    colors.push(...INDICATORS.map((ind, i) => (counts[i] ? COLORS[ind] : OFF)));
-    legend.push(`m${s + 1}[${INDICATORS.map((ind, i) => `${ind}:${counts[i]}`).join(" ")}]`);
+    colors.push(...INDICATORS.map((ind, i) => (counts[i] ? dim(COLORS[ind], counts[i] / statuses.length) : OFF)));
+    legend.push(`m${s + 1}[${INDICATORS.map((ind, i) => `${ind}:${counts[i]}`).join(" ")} of ${statuses.length}]`);
   }
   return { colors, legend: legend.join(" ") };
 }
