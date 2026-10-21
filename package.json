@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "bun src/main.ts",
+    "start:dry": "bun src/main.ts --dry-run",
     "spike:herdr": "bun spikes/herdr-events.ts",
     "spike:chroma": "bun spikes/chroma-grid.ts",
     "spike:chroma-ws": "bun spikes/chroma-ws.ts"

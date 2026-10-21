@@ -64,10 +64,16 @@ De-risk both integrations before any design.
 
 ### Phase 1 — End-to-end slice (~1 day)
 - Single script: subscribe → `paneId → state` map → panes mapped to keys `1`–`9` in creation order.
-- Static colors: working = blue, blocked = amber, done = green, idle = dim white.
+- Static colors: working = blue, blocked = amber, done = green, idle = dim purple. Never white — white means the keyboard is back in its default state.
 - Redraw on every change; clean Chroma session release on Ctrl+C or pipe close.
 
 **Exit:** with 2–3 Claude panes running, number keys reflect agent states. Validates the core value.
+
+**Implemented (2026-10-21)** — `src/main.ts` + `src/razer.ts`, run with `bun start` (or `bun start:dry` to print frames without the keyboard). Adapted to the Phase 0 findings:
+- Agent panes (an `agent` is set or status isn't `unknown`) take zones 0–7 left→right in order of appearance; a closed pane frees its zone and later panes shift left. Non-agent panes stay dark.
+- Every `pane_created` triggers a fresh snapshot + a new subscription connection (debounced 100 ms); the old connection is dropped once the new one reports `subscription_started`.
+- Frames go to HID only when colors change, plus a 5 s keepalive resend; the Chroma SDK session is released on SIGINT/SIGTERM or when herdr closes the pipe.
+- Fake states from `herdr pane report-agent` on a pane without a real agent get reset to `unknown` by herdr within ~0.5 s, so test with real Claude panes.
 
 ### Phase 2 — Structure + animation (~1–2 days)
 - Refactor into `herdr/`, `state/`, `render/`, `backend/` modules.
