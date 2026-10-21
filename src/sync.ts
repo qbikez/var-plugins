@@ -2,6 +2,7 @@
 // Each instance owns a machine slot (a block of zones) and publishes its statuses to a hub; the hub relays every slot
 // to every peer, so whichever machine currently has the keyboard can light all zones.
 import type { Server, ServerWebSocket } from "bun";
+import { timingSafeEqual } from "node:crypto";
 
 export type Slots = Map<number, string[]>;
 
@@ -10,16 +11,27 @@ interface Hello { slot: number; statuses: string[] }
 const isHello = (m: any): m is Hello =>
   Number.isInteger(m?.slot) && Array.isArray(m.statuses) && m.statuses.every((s: unknown) => typeof s === "string");
 
+export interface HubOptions {
+  hostname?: string;
+  // When set, peers must connect with ?token=<token> in the hub URL; anything public-facing should set one.
+  token?: string;
+}
+
+const tokenMatches = (given: string | null, expected: string) =>
+  given !== null && given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+
 // The hub is a plain relay: latest statuses per slot, dropped when the owning peer disconnects.
-export function serveHub(port: number): Server<unknown> {
+export function serveHub(port: number, { hostname = "0.0.0.0", token }: HubOptions = {}): Server<unknown> {
   const slots: Slots = new Map();
   const owners = new Map<ServerWebSocket<unknown>, number>();
   const state = () => JSON.stringify({ slots: Object.fromEntries(slots) });
 
   const server = Bun.serve({
     port,
-    hostname: "0.0.0.0",
+    hostname,
     fetch(req, server) {
+      if (token && !tokenMatches(new URL(req.url).searchParams.get("token"), token))
+        return new Response("unauthorized", { status: 401 });
       return server.upgrade(req) ? undefined : new Response("herdr-chroma hub (websocket only)", { status: 426 });
     },
     websocket: {
@@ -48,7 +60,7 @@ export function serveHub(port: number): Server<unknown> {
       },
     },
   });
-  console.log(`hub listening on ws://0.0.0.0:${port}`);
+  console.log(`hub listening on ws://${hostname}:${server.port}${token ? " (token required)" : ""}`);
   return server;
 }
 

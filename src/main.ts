@@ -6,6 +6,9 @@
 // Two machines sharing the keyboard through a KVM swap statuses through a websocket hub hosted by one of them:
 //   machine 1: bun src/main.ts --machine 1 --serve 7777
 //   machine 2: bun src/main.ts --machine 2 --hub ws://<machine-1>:7777
+// or through a standalone hub on a server (see src/hub.ts):
+//   machine N: bun src/main.ts --machine N --hub wss://<server>/?token=<secret>
+// --serve honours HUB_TOKEN, and the joining machine then adds ?token=<secret> to its --hub URL.
 import { connect, type Socket } from "node:net";
 import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./razer";
 import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
@@ -42,7 +45,10 @@ const arg = (name: string) => {
 };
 const MACHINES = 2;
 const servePort = arg("--serve");
-const hubUrl = arg("--hub") ?? (servePort && `ws://localhost:${servePort}`);
+const hubToken = process.env.HUB_TOKEN;
+const hubUrl =
+  arg("--hub") ??
+  (servePort && `ws://localhost:${servePort}${hubToken ? `?token=${encodeURIComponent(hubToken)}` : ""}`);
 const slot = Number(arg("--machine") ?? 1) - 1;
 if (!Number.isInteger(slot) || slot < 0 || slot >= MACHINES) throw new Error(`--machine must be 1..${MACHINES}`);
 const slotZones = ZONES / MACHINES;
@@ -257,7 +263,7 @@ async function shutdown(reason: string) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-if (servePort) serveHub(Number(servePort));
+if (servePort) serveHub(Number(servePort), { token: hubToken });
 if (hubUrl) {
   hub = joinHub(hubUrl, slot, (slots) => {
     remote = slots;

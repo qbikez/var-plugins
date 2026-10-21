@@ -76,6 +76,7 @@ De-risk both integrations before any design.
 - Fake states from `herdr pane report-agent` on a pane without a real agent get reset to `unknown` by herdr within ~0.5 s, so test with real Claude panes.
 
 **Two machines, one keyboard (KVM)** — `src/sync.ts`. Each machine runs its own instance and owns half the zones (`--machine 1` → 0–3, `--machine 2` → 4–7). Within a half, the zones are indicators over all of that machine's agents, left → right: any blocked (amber), any working (blue), any done (green), any idle (purple). One instance hosts a websocket hub (`--serve <port>`), the other joins it (`--hub ws://<host>:<port>`). Peers publish all their agents' statuses; the hub relays every slot to everyone and drops a slot when its peer disconnects. Whichever machine holds the keyboard renders all 8 zones; the other keeps retrying `openKeyboard` every 2 s and takes over after a KVM switch. A failed HID write is treated as "keyboard gone".
+The hub can also run on its own, with no herdr or keyboard, e.g. on a webserver both machines can reach: `bun src/hub.ts --port 7777` (or `PORT`/`HOST` env), then both instances join it with `--hub`. Set `HUB_TOKEN` on the hub and add `?token=<secret>` to each `--hub` URL; behind a TLS reverse proxy use `wss://`.
 
 ### Phase 2 — Structure + animation (~1–2 days)
 - Refactor into `herdr/`, `state/`, `render/`, `backend/` modules.
