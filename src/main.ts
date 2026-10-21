@@ -1,8 +1,14 @@
 // Phase 1 end-to-end slice: herdr agent status → Ornata V3 TKL zones.
 // Agent panes take zones 0–7 (left → right) in the order they appear; extra panes wait for a free zone.
 // Usage: bun src/main.ts [--dry-run]   (run inside herdr; --dry-run prints frames instead of lighting the keyboard)
+//
+// Two machines sharing the keyboard through a KVM: each gets half the zones (machine 1 → 0–3, machine 2 → 4–7)
+// and they swap statuses through a websocket hub hosted by one of them:
+//   machine 1: bun src/main.ts --machine 1 --serve 7777
+//   machine 2: bun src/main.ts --machine 2 --hub ws://<machine-1>:7777
 import { connect, type Socket } from "node:net";
 import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./razer";
+import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
 
 type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 interface Pane { agent?: string; status: AgentStatus }
@@ -21,6 +27,18 @@ const socketPath = process.env.HERDR_SOCKET_PATH;
 if (!socketPath) throw new Error("HERDR_SOCKET_PATH not set (run inside herdr)");
 const pipePath = process.platform === "win32" ? `\\\\.\\pipe\\${socketPath}` : socketPath;
 const dryRun = process.argv.includes("--dry-run");
+
+const arg = (name: string) => {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+};
+const MACHINES = 2;
+const servePort = arg("--serve");
+const hubUrl = arg("--hub") ?? (servePort && `ws://localhost:${servePort}`);
+const slot = Number(arg("--machine") ?? 1) - 1;
+if (!Number.isInteger(slot) || slot < 0 || slot >= MACHINES) throw new Error(`--machine must be 1..${MACHINES}`);
+// Alone, this machine owns every zone; with a hub, it owns its slot's block.
+const slotZones = hubUrl ? ZONES / MACHINES : ZONES;
 
 const panes = new Map<string, Pane>();
 const zoneOrder: string[] = []; // agent pane ids, in order of appearance
@@ -148,20 +166,36 @@ function onEvent(kind: string, data: any) {
 // --- output ----------------------------------------------------------------
 
 let keyboard: Keyboard | undefined;
+let hub: HubClient | undefined;
+let remote: Slots = new Map();
 let lastFrame = "";
 let lastLegend = "";
+let lastPublished = "";
 
-function frame(): Rgb[] {
-  return Array.from({ length: ZONES }, (_, z) => {
-    const pane = panes.get(zoneOrder[z]);
-    return pane ? COLORS[pane.status] : OFF;
-  });
+const localStatuses = () => zoneOrder.slice(0, slotZones).map((id) => panes.get(id)!.status);
+
+// Zone z belongs to slot floor(z / slotZones); our own slot comes from local state, the rest from the hub.
+function frame(): { colors: Rgb[]; legend: string } {
+  const local = localStatuses();
+  const colors: Rgb[] = [];
+  const legend: string[] = [];
+  for (let z = 0; z < ZONES; z++) {
+    const s = Math.floor(z / slotZones), i = z % slotZones;
+    const status = s === slot ? local[i] : remote.get(s)?.[i];
+    colors.push(COLORS[status as AgentStatus] ?? OFF);
+    if (status) legend.push(`${z}:${s === slot ? zoneOrder[i] : `m${s + 1}`}=${status}`);
+  }
+  return { colors, legend: legend.join(" ") };
 }
 
 function render() {
-  const colors = frame();
+  const local = JSON.stringify(localStatuses());
+  if (hub && local !== lastPublished) {
+    lastPublished = local;
+    hub.publish(JSON.parse(local));
+  }
+  const { colors, legend } = frame();
   const key = JSON.stringify(colors);
-  const legend = zoneOrder.slice(0, ZONES).map((id, z) => `${z}:${id}=${panes.get(id)!.status}`).join(" ");
   if (legend !== lastLegend) {
     lastLegend = legend;
     const swatches = colors.map(([r, g, b]) => `\x1b[48;2;${r};${g};${b}m  \x1b[0m`).join(" ");
@@ -169,7 +203,39 @@ function render() {
   }
   if (key === lastFrame) return;
   lastFrame = key;
-  keyboard?.show(colors).catch((e) => console.error(`keyboard: ${e.message}`));
+  show(colors);
+}
+
+// --- keyboard --------------------------------------------------------------
+
+// Behind a KVM the keyboard comes and goes: a failed write drops it, and attach() keeps retrying until it's back.
+function show(colors: Rgb[]) {
+  const kb = keyboard;
+  kb?.show(colors).catch((e) => {
+    if (keyboard !== kb) return;
+    keyboard = undefined;
+    console.log(`keyboard detached: ${e.message}`);
+    kb.close().catch(() => {});
+  });
+}
+
+let attaching = false;
+let lastAttachError = "";
+async function attach() {
+  if (keyboard || attaching || stopping) return;
+  attaching = true;
+  try {
+    keyboard = await openKeyboard();
+    lastAttachError = "";
+    console.log("keyboard attached");
+    if (lastFrame) show(JSON.parse(lastFrame));
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg !== lastAttachError) console.log(`keyboard unavailable: ${msg}, retrying`);
+    lastAttachError = msg;
+  } finally {
+    attaching = false;
+  }
 }
 
 let stopping = false;
@@ -178,6 +244,7 @@ async function shutdown(reason: string) {
   stopping = true;
   console.log(`stopping: ${reason}`);
   subscription?.end();
+  hub?.close();
   await keyboard?.close();
   process.exit(0);
 }
@@ -185,10 +252,21 @@ async function shutdown(reason: string) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
+if (servePort) serveHub(Number(servePort));
+if (hubUrl) {
+  hub = joinHub(hubUrl, slot, (slots) => {
+    remote = slots;
+    render();
+  });
+}
 if (!dryRun) {
-  keyboard = await openKeyboard();
-  // Keep the keyboard refreshed in case the firmware resets (sleep/wake, replug).
-  setInterval(() => lastFrame && keyboard?.show(JSON.parse(lastFrame)).catch(() => {}), 5000);
+  await attach();
+  setInterval(() => {
+    // Keep the keyboard refreshed in case the firmware resets (sleep/wake, replug), and pick it back up after a KVM switch.
+    if (keyboard) lastFrame && show(JSON.parse(lastFrame));
+    else attach();
+  }, 2000);
 }
 await resync();
-console.log(`watching herdr via ${pipePath}${dryRun ? " (dry run)" : ""}; Ctrl+C to stop`);
+const zones = `zones ${slot * slotZones}–${slot * slotZones + slotZones - 1}`;
+console.log(`watching herdr via ${pipePath} on ${zones}${dryRun ? " (dry run)" : ""}; Ctrl+C to stop`);
