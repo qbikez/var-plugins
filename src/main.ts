@@ -1,9 +1,9 @@
 // Phase 1 end-to-end slice: herdr agent status → Ornata V3 TKL zones.
-// Agent panes take zones 0–7 (left → right) in the order they appear; extra panes wait for a free zone.
+// Each machine owns half the keyboard (machine 1 → zones 0–3, machine 2 → 4–7), lit as indicators over all its agents:
+// any blocked, any working, any done, any idle.
 // Usage: bun src/main.ts [--dry-run]   (run inside herdr; --dry-run prints frames instead of lighting the keyboard)
 //
-// Two machines sharing the keyboard through a KVM: each gets half the zones (machine 1 → 0–3, machine 2 → 4–7)
-// and they swap statuses through a websocket hub hosted by one of them:
+// Two machines sharing the keyboard through a KVM swap statuses through a websocket hub hosted by one of them:
 //   machine 1: bun src/main.ts --machine 1 --serve 7777
 //   machine 2: bun src/main.ts --machine 2 --hub ws://<machine-1>:7777
 import { connect, type Socket } from "node:net";
@@ -22,6 +22,8 @@ const COLORS: Record<AgentStatus, Rgb> = {
   unknown: [0, 0, 0],
 };
 const OFF: Rgb = [0, 0, 0];
+// What each zone of a machine's half indicates, left → right.
+const INDICATORS: AgentStatus[] = ["blocked", "working", "done", "idle"];
 
 const socketPath = process.env.HERDR_SOCKET_PATH;
 if (!socketPath) throw new Error("HERDR_SOCKET_PATH not set (run inside herdr)");
@@ -37,11 +39,9 @@ const servePort = arg("--serve");
 const hubUrl = arg("--hub") ?? (servePort && `ws://localhost:${servePort}`);
 const slot = Number(arg("--machine") ?? 1) - 1;
 if (!Number.isInteger(slot) || slot < 0 || slot >= MACHINES) throw new Error(`--machine must be 1..${MACHINES}`);
-// Alone, this machine owns every zone; with a hub, it owns its slot's block.
-const slotZones = hubUrl ? ZONES / MACHINES : ZONES;
+const slotZones = ZONES / MACHINES;
 
 const panes = new Map<string, Pane>();
-const zoneOrder: string[] = []; // agent pane ids, in order of appearance
 
 // --- herdr pipe ------------------------------------------------------------
 
@@ -130,13 +130,10 @@ function setPane(id: string, agent: string | undefined, status: AgentStatus = "u
   pane.agent = agent ?? pane.agent;
   pane.status = status;
   panes.set(id, pane);
-  if ((pane.agent || status !== "unknown") && !zoneOrder.includes(id)) zoneOrder.push(id);
 }
 
 function removePane(id: string) {
   panes.delete(id);
-  const i = zoneOrder.indexOf(id);
-  if (i >= 0) zoneOrder.splice(i, 1);
 }
 
 function onEvent(kind: string, data: any) {
@@ -172,18 +169,20 @@ let lastFrame = "";
 let lastLegend = "";
 let lastPublished = "";
 
-const localStatuses = () => zoneOrder.slice(0, slotZones).map((id) => panes.get(id)!.status);
+// Every known agent status on this machine, sorted so unchanged state publishes identically.
+const localStatuses = () => [...panes.values()].map((p) => p.status).filter((s) => s !== "unknown").sort();
 
-// Zone z belongs to slot floor(z / slotZones); our own slot comes from local state, the rest from the hub.
+// Zone z belongs to slot floor(z / slotZones) and lights when any of that machine's agents is in INDICATORS[z % slotZones].
+// Our own slot comes from local state, the others from the hub.
 function frame(): { colors: Rgb[]; legend: string } {
   const local = localStatuses();
   const colors: Rgb[] = [];
   const legend: string[] = [];
-  for (let z = 0; z < ZONES; z++) {
-    const s = Math.floor(z / slotZones), i = z % slotZones;
-    const status = s === slot ? local[i] : remote.get(s)?.[i];
-    colors.push(COLORS[status as AgentStatus] ?? OFF);
-    if (status) legend.push(`${z}:${s === slot ? zoneOrder[i] : `m${s + 1}`}=${status}`);
+  for (let s = 0; s < MACHINES; s++) {
+    const statuses = s === slot ? local : (remote.get(s) ?? []);
+    const counts = INDICATORS.map((ind) => statuses.filter((st) => st === ind).length);
+    colors.push(...INDICATORS.map((ind, i) => (counts[i] ? COLORS[ind] : OFF)));
+    legend.push(`m${s + 1}[${INDICATORS.map((ind, i) => `${ind}:${counts[i]}`).join(" ")}]`);
   }
   return { colors, legend: legend.join(" ") };
 }
