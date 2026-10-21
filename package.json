@@ -1,0 +1,13 @@
+{
+  "name": "herdr-chroma-plugin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike:herdr": "bun spikes/herdr-events.ts",
+    "spike:chroma": "bun spikes/chroma-grid.ts",
+    "spike:chroma-ws": "bun spikes/chroma-ws.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
