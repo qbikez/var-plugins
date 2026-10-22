@@ -1,4 +1,22 @@
 $targets = @{
+    "usage"   = {
+        $heading = { param($text) Write-Host "`n$text" -ForegroundColor Cyan }
+        $cmd = { param($text, $note) Write-Host "  $text" -ForegroundColor Green -NoNewline; Write-Host $(if ($note) { "  $note" }) -ForegroundColor DarkGray }
+
+        & $heading "Install (from GitHub)"
+        & $cmd "herdr plugin install qbikez/foundry/herdr-chroma-plugin"
+        & $cmd "qbuild install" "from this checkout"
+
+        & $heading "Configure (then reopen the daemon pane)"
+        & $cmd "herdr plugin action invoke qbikez.chroma.machine-1" "or machine-2"
+        & $cmd "bun src/configure.ts set hub <ws-url>" "other settings: show | set | unset"
+
+        & $heading "Start"
+        & $cmd "herdr plugin pane open --plugin qbikez.chroma --entrypoint daemon"
+        & $cmd "qbuild run" "from this checkout"
+        Write-Host
+    }
+
     "restore" = {
         bun install
     }
