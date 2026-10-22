@@ -35,3 +35,9 @@ id = "open"
 title = "Open Chroma keyboard daemon"
 contexts = ["workspace"]
 command = ["herdr", "plugin", "pane", "open", "--plugin", "qbikez.chroma", "--entrypoint", "daemon"]
+
+[[actions]]
+id = "help"
+title = "Chroma: show plugin help"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/help.ts"]

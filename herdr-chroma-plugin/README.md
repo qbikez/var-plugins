@@ -42,6 +42,8 @@ description = "chroma keyboard"
 
 Logs: `herdr plugin log list --plugin qbikez.chroma`.
 
+Help: `herdr plugin action invoke qbikez.chroma.help` lists the actions and config commands.
+
 ## Configuration
 
 Set which machine this is (1 = zones 0–3, 2 = zones 4–7), then reopen the daemon pane:
@@ -69,8 +71,18 @@ Both write `config.json` in the plugin config dir (`herdr plugin config-dir qbik
 | `serve` | host the sync hub on this port |
 | `hub` | join a hub, `ws(s)://host:port/?token=...` |
 | `hubToken` | token for `serve` (also read from `HUB_TOKEN`) |
+| `mqtt` | sync through an MQTT broker instead of a hub, `mqtt(s)://user:pass@host:port` |
+| `mqttTopic` | topic prefix for `mqtt` (default `herdr-chroma`) |
 
-CLI flags (`--machine`, `--serve`, `--hub`, `--dry-run`) override the file. A standalone hub for a server: `bun src/hub.ts --port 7777`.
+### MQTT sync
+
+Instead of a hub, every instance can publish its state to an MQTT broker and listen to the others. Each machine writes its agent statuses as a retained message on `<mqttTopic>/<machine-1>` (so `herdr-chroma/0` and `herdr-chroma/1`) and subscribes to `<mqttTopic>/+`, which rebuilds the full state, including after a restart. A last-will clears a machine's slot when it disconnects. Set `mqtt` on every machine, with a different `machine` on each; `mqtt` takes precedence over `hub`/`serve`.
+
+```sh
+bun src/configure.ts set mqtt "mqtts://user:pass@broker.example.com:8883"
+```
+
+CLI flags (`--machine`, `--serve`, `--hub`, `--mqtt`, `--mqtt-topic`, `--dry-run`) override the file. A standalone hub for a server: `bun src/hub.ts --port 7777`.
 
 ## Limitations
 
