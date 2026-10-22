@@ -9,8 +9,12 @@
 // or through a standalone hub on a server (see src/hub.ts):
 //   machine N: bun src/main.ts --machine N --hub wss://<server>/?token=<secret>
 // --serve honours HUB_TOKEN, and the joining machine then adds ?token=<secret> to its --hub URL.
+//
+// Or skip the hub and sync through an MQTT broker, each machine publishing its own slot (see src/mqtt.ts):
+//   machine N: bun src/main.ts --machine N --mqtt mqtts://user:pass@broker:8883 [--mqtt-topic herdr-chroma]
 import { connect, type Socket } from "node:net";
 import { loadConfig } from "./config";
+import { joinMqtt } from "./mqtt";
 import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./razer";
 import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
 
@@ -54,6 +58,8 @@ const hubUrl =
   arg("--hub") ??
   config.hub ??
   (servePort && `ws://localhost:${servePort}${hubToken ? `?token=${encodeURIComponent(hubToken)}` : ""}`);
+const mqttUrl = arg("--mqtt") ?? config.mqtt;
+const mqttTopic = arg("--mqtt-topic") ?? config.mqttTopic;
 const slot = Number(arg("--machine") ?? config.machine ?? 1) - 1;
 if (!Number.isInteger(slot) || slot < 0 || slot >= MACHINES) throw new Error(`--machine must be 1..${MACHINES}`);
 const slotZones = ZONES / MACHINES;
@@ -268,12 +274,15 @@ async function shutdown(reason: string) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-if (servePort) serveHub(Number(servePort), { token: hubToken });
-if (hubUrl) {
-  hub = joinHub(hubUrl, slot, (slots) => {
-    remote = slots;
-    render();
-  });
+const onSlots = (slots: Slots) => {
+  remote = slots;
+  render();
+};
+if (mqttUrl) {
+  hub = joinMqtt(mqttUrl, slot, onSlots, mqttTopic);
+} else {
+  if (servePort) serveHub(Number(servePort), { token: hubToken });
+  if (hubUrl) hub = joinHub(hubUrl, slot, onSlots);
 }
 if (!dryRun) {
   await attach();

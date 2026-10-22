@@ -8,6 +8,9 @@ export interface Config {
   hub?: string;
   serve?: number | string;
   hubToken?: string;
+  // Alternative to hub/serve: sync through an MQTT broker, e.g. "mqtts://user:pass@host:8883".
+  mqtt?: string;
+  mqttTopic?: string;
 }
 
 export function configPath(): string | undefined {

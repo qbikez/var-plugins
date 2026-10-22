@@ -14,6 +14,9 @@ $targets = @{
         & $heading "Start"
         & $cmd "herdr plugin pane open --plugin qbikez.chroma --entrypoint daemon"
         & $cmd "qbuild run" "from this checkout"
+
+        & $heading "Sync hub (optional, elevated shell)"
+        & $cmd "qbuild firewall" "opens TCP 7777 inbound for the hub"
         Write-Host
     }
 
@@ -68,6 +71,20 @@ $targets = @{
             if ($ref) { throw "-ref only applies with -github" }
             qbuild build
             qbuild link
+        }
+    }
+
+    "firewall" = {
+        param([int] $port = 7777)
+        # Opens inbound TCP for the sync hub (src/hub.ts, default port 7777). Needs an elevated shell.
+        $ruleName = "herdr-chroma sync hub (port $port)"
+        if (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue) {
+            Write-Host "Firewall rule '$ruleName' already exists — skipping." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "Adding firewall rule '$ruleName' (TCP $port inbound)..." -ForegroundColor Cyan
+            New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow | Out-Null
+            Write-Host "  Hub  ws://<this-ip>:$port  (accessible from LAN)" -ForegroundColor Green
         }
     }
 
