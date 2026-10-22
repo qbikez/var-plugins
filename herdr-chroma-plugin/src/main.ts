@@ -40,7 +40,7 @@ const ANIMATION_CYCLE_MS = 10_000, ANIMATION_TICK_MS = 100, ANIMATION_MIN = 0.08
 const wave = (phase: number) => 0.5 - 0.5 * Math.cos(2 * Math.PI * phase);
 const hash = (n: number) => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
 const ANIMATIONS: { name: string; level: (t: number, z: number, n: number) => number }[] = [
-  { name: "anime", level: (t) => wave(t / 4000) },
+  { name: "breathe", level: (t) => wave(t / 4000) },
   { name: "wave", level: (t, z, n) => wave(t / 2000 - z / n) },
   // Bounces back and forth with a short trail.
   { name: "scanner", level: (t, z, n) => {
