@@ -19,7 +19,9 @@ import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./razer";
 import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
 
 type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
-interface Pane { agent?: string; status: AgentStatus }
+// doneAway: the agent finished while the keyboard was away (KVM switched to another machine). herdr marks a finished agent
+// in the focused pane as seen straight away, since it can't tell we left, so it reports idle; we show it as done until we're back.
+interface Pane { agent?: string; status: AgentStatus; doneAway?: boolean }
 
 // No white or grey: white is reserved for spotting the keyboard's default (Synapse) state.
 const COLORS: Record<AgentStatus, Rgb> = {
@@ -180,6 +182,8 @@ function scheduleResync() {
 function setPane(id: string, agent: string | undefined, status: AgentStatus = "unknown") {
   const pane = panes.get(id) ?? { status: "unknown" };
   pane.agent = agent ?? pane.agent;
+  if (status !== "idle") pane.doneAway = false;
+  else if (!pane.doneAway && (pane.status === "working" || pane.status === "blocked") && isAway()) pane.doneAway = true;
   pane.status = status;
   panes.set(id, pane);
 }
@@ -215,6 +219,8 @@ function onEvent(kind: string, data: any) {
 // --- output ----------------------------------------------------------------
 
 let keyboard: Keyboard | undefined;
+// Behind a KVM, no keyboard means another machine has it.
+const isAway = () => !dryRun && !keyboard;
 let hub: HubClient | undefined;
 let remote: Slots = new Map();
 let lastFrame = "";
@@ -226,7 +232,7 @@ let lastLegend = "";
 let lastPublished = "";
 
 // Every known agent status on this machine, sorted so unchanged state publishes identically.
-const localStatuses = () => [...panes.values()].map((p) => p.status).filter((s) => s !== "unknown").sort();
+const localStatuses = () => [...panes.values()].map((p) => (p.doneAway ? "done" : p.status)).filter((s) => s !== "unknown").sort();
 
 // Zone z belongs to slot floor(z / slotZones) and lights when any of that machine's agents is in INDICATORS[z % slotZones],
 // brighter the larger their share. Our own slot comes from local state, the others from the hub.
@@ -308,6 +314,8 @@ async function attach() {
     lastAttachError = "";
     retryDelay = RETRY_MIN_MS;
     console.log("keyboard attached");
+    for (const pane of panes.values()) pane.doneAway = false;
+    render();
     if (lastFrame) paint(true);
   } catch (e) {
     const msg = (e as Error).message;
