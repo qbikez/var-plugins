@@ -243,18 +243,24 @@ function show(colors: Rgb[]) {
 
 let attaching = false;
 let lastAttachError = "";
+// Back off while the device is unusable so a wedged driver doesn't churn Chroma SDK sessions every tick.
+const RETRY_MIN_MS = 2000, RETRY_MAX_MS = 30_000;
+let retryDelay = RETRY_MIN_MS, nextAttachAt = 0;
 async function attach() {
-  if (keyboard || attaching || stopping) return;
+  if (keyboard || attaching || stopping || Date.now() < nextAttachAt) return;
   attaching = true;
   try {
     keyboard = await openKeyboard();
     lastAttachError = "";
+    retryDelay = RETRY_MIN_MS;
     console.log("keyboard attached");
     if (lastFrame) show(JSON.parse(lastFrame));
   } catch (e) {
     const msg = (e as Error).message;
     if (msg !== lastAttachError) console.log(`keyboard unavailable: ${msg}, retrying`);
     lastAttachError = msg;
+    nextAttachAt = Date.now() + retryDelay;
+    retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
   } finally {
     attaching = false;
   }

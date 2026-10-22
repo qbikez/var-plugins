@@ -67,6 +67,14 @@ async function sendReport(h: Pointer, r: Uint8Array): Promise<void> {
   if (back[1] !== 2) throw new Error(`Razer report status: ${STATUS[back[1]] ?? back[1]}`);
 }
 
+// A present HID node doesn't mean the firmware answers (KVM switched away, driver stack wedged): check before attaching.
+async function probe(h: Pointer): Promise<void> {
+  const q = report(0x00, 0x81, 0x02, []); // firmware version query, read-only
+  if (!hid.HidD_SetFeature(h, ptr(q), q.length)) throw new Error(`HidD_SetFeature failed (${k32.GetLastError()})`);
+  await Bun.sleep(5);
+  if (!hid.HidD_GetFeature(h, ptr(new Uint8Array(91)), 91)) throw new Error(`HidD_GetFeature failed (${k32.GetLastError()})`);
+}
+
 // Holding a session (heartbeat only, no effects) makes Synapse stop repainting; DELETE hands the keyboard back.
 async function holdSdkSession(): Promise<() => Promise<void>> {
   const call = (method: string, url: string, body?: unknown) =>
@@ -99,6 +107,12 @@ export interface Keyboard {
 
 export async function openKeyboard(): Promise<Keyboard> {
   const h = openHid(findInterface());
+  try {
+    await probe(h);
+  } catch (e) {
+    k32.CloseHandle(h);
+    throw e;
+  }
   let releaseSdk = async () => {};
   try {
     releaseSdk = await holdSdkSession();

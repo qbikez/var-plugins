@@ -14,6 +14,7 @@ $targets = @{
         & $heading "Start"
         & $cmd "herdr plugin pane open --plugin qbikez.chroma --entrypoint daemon"
         & $cmd "qbuild run" "from this checkout"
+        & $cmd "qbuild run.herdr" "link this checkout and open the herdr plugin pane"
 
         & $heading "Sync hub (optional, elevated shell)"
         & $cmd "qbuild firewall" "opens TCP 7777 inbound for the hub"
@@ -49,6 +50,12 @@ $targets = @{
             qbuild link
             herdr plugin pane open --plugin qbikez.chroma --entrypoint daemon
         }
+    }
+
+    "run.herdr" = {
+        # Start the daemon through herdr, as the installed plugin would run it.
+        qbuild link
+        herdr plugin pane open --plugin qbikez.chroma --entrypoint daemon
     }
 
     "link"    = {
