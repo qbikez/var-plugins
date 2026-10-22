@@ -16,7 +16,7 @@ $targets = @{
 
     "run"     = {
         param([switch][bool] $dry, [ValidateSet(1, 2)][int] $machine)
-        # The daemon needs herdr's socket. Inside a herdr pane run it directly, otherwise open the plugin's pane.
+        # The daemon needs herdr's socket. Inside a herdr pane run it directly (foreground), otherwise open the plugin's pane.
         if ($env:HERDR_SOCKET_PATH) {
             $flags = @()
             if ($dry) { $flags += "--dry-run" }
@@ -33,6 +33,24 @@ $targets = @{
     "link"    = {
         # Register this checkout as a local plugin (no build commands run).
         herdr plugin link $PSScriptRoot
+    }
+
+    "install"  = {
+        param([switch][bool] $github, [string] $ref)
+        # Default: install this checkout (typechecked) as a linked local plugin.
+        # -github: install the published plugin the way end users do, optionally pinned with -ref.
+        foreach ($tool in "bun", "herdr") {
+            if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "$tool not found on PATH" }
+        }
+        if ($github) {
+            $refArgs = $ref ? @("--ref", $ref) : @()
+            herdr plugin install qbikez/foundry/herdr-chroma-plugin @refArgs
+        }
+        else {
+            if ($ref) { throw "-ref only applies with -github" }
+            qbuild build
+            qbuild link
+        }
     }
 
     "release" = {

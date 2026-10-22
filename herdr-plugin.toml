@@ -17,6 +17,19 @@ title = "Chroma keyboard"
 placement = "tab"
 command = ["bun", "src/main.ts"]
 
+# Which half of the keyboard this machine owns (see README). Takes effect when the daemon pane is reopened.
+[[actions]]
+id = "machine-1"
+title = "Chroma: this is machine 1 (zones 0-3)"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/configure.ts", "set", "machine", "1"]
+
+[[actions]]
+id = "machine-2"
+title = "Chroma: this is machine 2 (zones 4-7)"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/configure.ts", "set", "machine", "2"]
+
 [[actions]]
 id = "open"
 title = "Open Chroma keyboard daemon"

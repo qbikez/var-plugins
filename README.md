@@ -44,7 +44,20 @@ Logs: `herdr plugin log list --plugin qbikez.chroma`.
 
 ## Configuration
 
-Optional `config.json` in the plugin config dir (`herdr plugin config-dir qbikez.chroma`):
+Set which machine this is (1 = zones 0–3, 2 = zones 4–7), then reopen the daemon pane:
+
+```sh
+herdr plugin action invoke qbikez.chroma.machine-2
+```
+
+Other settings, from a shell inside the plugin folder or via `bun <plugin dir>/src/configure.ts`:
+
+```sh
+bun src/configure.ts set hub "wss://example.com/?token=secret"
+bun src/configure.ts show
+```
+
+Both write `config.json` in the plugin config dir (`herdr plugin config-dir qbikez.chroma`), which you can also edit by hand:
 
 ```json
 { "machine": 2, "hub": "wss://example.com/?token=secret" }
