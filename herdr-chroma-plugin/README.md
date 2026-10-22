@@ -72,6 +72,25 @@ Both write `config.json` in the plugin config dir (`herdr plugin config-dir qbik
 
 CLI flags (`--machine`, `--serve`, `--hub`, `--dry-run`) override the file. A standalone hub for a server: `bun src/hub.ts --port 7777`.
 
+## Syncing two machines
+
+1. Start a hub. Either run a standalone one on a server, with the token in the environment:
+
+   ```sh
+   HUB_TOKEN=secret bun src/hub.ts --port 7777
+   ```
+
+   or let one of the machines host it by setting `serve` (and optionally `hubToken`) in its config.
+2. On each machine, point the plugin at the hub. The token must match the hub's:
+
+   ```sh
+   bun src/configure.ts set hub "wss://your-host:7777/?token=secret"
+   ```
+
+   Use `ws://` instead of `wss://` if there is no TLS proxy in front of the hub.
+3. Give each machine its own number, `qbikez.chroma.machine-1` or `qbikez.chroma.machine-2` (see above), so they light different zones.
+4. Reopen the daemon pane on each machine.
+
 ## Limitations
 
 - The daemon stops if herdr closes its event pipe; reopen the pane after restarting herdr.
