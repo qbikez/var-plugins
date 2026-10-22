@@ -1,0 +1,20 @@
+{
+  "name": "herdr-chroma-plugin",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "bun src/main.ts",
+    "start:dry": "bun src/main.ts --dry-run",
+    "hub": "bun src/hub.ts",
+    "spike:herdr": "bun spikes/herdr-events.ts",
+    "spike:chroma": "bun spikes/chroma-grid.ts",
+    "spike:chroma-ws": "bun spikes/chroma-ws.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^7.0.2"
+  }
+}

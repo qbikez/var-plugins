@@ -1,0 +1,37 @@
+id = "qbikez.chroma"
+name = "Chroma"
+version = "0.1.0"
+description = "Shows herdr agent states (blocked / working / done / idle) on a Razer Ornata V3 TKL keyboard"
+min_herdr_version = "0.9.3"
+platforms = ["windows"]
+
+# Requires Bun (https://bun.sh) on PATH; this also fails the install early if it is missing.
+[[build]]
+command = ["bun", "install", "--frozen-lockfile"]
+
+# The daemon is long-running, so it lives in a pane. We might switch to a [[startup]] hook at some
+# point, if herdr startup hooks start supporting resident processes (today they are one-shot).
+[[panes]]
+id = "daemon"
+title = "Chroma keyboard"
+placement = "tab"
+command = ["bun", "src/main.ts"]
+
+# Which half of the keyboard this machine owns (see README). Takes effect when the daemon pane is reopened.
+[[actions]]
+id = "machine-1"
+title = "Chroma: this is machine 1 (zones 0-3)"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/configure.ts", "set", "machine", "1"]
+
+[[actions]]
+id = "machine-2"
+title = "Chroma: this is machine 2 (zones 4-7)"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/configure.ts", "set", "machine", "2"]
+
+[[actions]]
+id = "open"
+title = "Open Chroma keyboard daemon"
+contexts = ["workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "qbikez.chroma", "--entrypoint", "daemon"]
