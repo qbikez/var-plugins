@@ -34,9 +34,36 @@ const OFF: Rgb = [0, 0, 0];
 const INDICATORS: AgentStatus[] = ["blocked", "working", "done", "idle"];
 // A lit zone's brightness is the share of the machine's agents in that state, floored so one agent out of many stays visible.
 const MIN_BRIGHTNESS = 0.2;
-// A machine with exactly one active zone breathes that zone's colour over all its zones.
-const BREATH_PERIOD_MS = 4000, BREATH_MIN = 0.1, BREATH_TICK_MS = 100;
-const breathLevel = (now: number) => BREATH_MIN + (1 - BREATH_MIN) * (0.5 - 0.5 * Math.cos((2 * Math.PI * now) / BREATH_PERIOD_MS));
+// A machine with exactly one active zone animates that zone's colour over all its zones,
+// cycling through CYCLE every ANIMATION_CYCLE_MS. Each returns the brightness (0..1) of zone z of n at time t.
+const ANIMATION_CYCLE_MS = 10_000, ANIMATION_TICK_MS = 100, ANIMATION_MIN = 0.08;
+const wave = (phase: number) => 0.5 - 0.5 * Math.cos(2 * Math.PI * phase);
+const hash = (n: number) => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
+const ANIMATIONS: { name: string; level: (t: number, z: number, n: number) => number }[] = [
+  { name: "anime", level: (t) => wave(t / 4000) },
+  { name: "wave", level: (t, z, n) => wave(t / 2000 - z / n) },
+  // Bounces back and forth with a short trail.
+  { name: "scanner", level: (t, z, n) => {
+    const pos = (n - 1) * (1 - Math.abs(((t / 2400) % 2) - 1));
+    return Math.max(0, 1 - Math.abs(z - pos) / 1.5);
+  } },
+  // Two quick beats, then rest.
+  { name: "heartbeat", level: (t) => {
+    const p = (t % 1400) / 1400;
+    return Math.max(Math.exp(-(((p - 0.1) / 0.06) ** 2)), 0.7 * Math.exp(-(((p - 0.3) / 0.06) ** 2)));
+  } },
+  // Each zone flares at its own pseudo-random moments.
+  { name: "twinkle", level: (t, z) => {
+    const slot = Math.floor(t / 400);
+    return hash(slot * 7 + z) > 0.55 ? 1 - ((t % 400) / 400) : 0;
+  } },
+];
+// Defined but not in the rotation: heartbeat, twinkle.
+const CYCLE = ["breathe", "wave", "scanner"];
+const animationAt = (now: number) => {
+  const name = CYCLE[Math.floor(now / ANIMATION_CYCLE_MS) % CYCLE.length];
+  return ANIMATIONS.find((a) => a.name === name)!;
+};
 const scale = (rgb: Rgb, k: number): Rgb => rgb.map((c) => Math.round(c * k)) as Rgb;
 const dim = (rgb: Rgb, share: number): Rgb => {
   const k = MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * share;
@@ -194,9 +221,9 @@ let hub: HubClient | undefined;
 let remote: Slots = new Map();
 let lastFrame = "";
 let lastColors: Rgb[] = [];
-let lastBreath: (Rgb | undefined)[] = [];
+let lastAnim: (Rgb | undefined)[] = [];
 let lastShown = "";
-let breathTimer: Timer | undefined;
+let animTimer: Timer | undefined;
 let lastLegend = "";
 let lastPublished = "";
 
@@ -205,20 +232,20 @@ const localStatuses = () => [...panes.values()].map((p) => p.status).filter((s) 
 
 // Zone z belongs to slot floor(z / slotZones) and lights when any of that machine's agents is in INDICATORS[z % slotZones],
 // brighter the larger their share. Our own slot comes from local state, the others from the hub.
-function frame(): { colors: Rgb[]; breath: (Rgb | undefined)[]; legend: string } {
+function frame(): { colors: Rgb[]; anim: (Rgb | undefined)[]; legend: string } {
   const local = localStatuses();
   const colors: Rgb[] = [];
-  const breath: (Rgb | undefined)[] = [];
+  const anim: (Rgb | undefined)[] = [];
   const legend: string[] = [];
   for (let s = 0; s < MACHINES; s++) {
     const statuses = s === slot ? local : (remote.get(s) ?? []);
     const counts = INDICATORS.map((ind) => statuses.filter((st) => st === ind).length);
     colors.push(...INDICATORS.map((ind, i) => (counts[i] ? dim(COLORS[ind], counts[i] / statuses.length) : OFF)));
     const active = INDICATORS.filter((_, i) => counts[i]);
-    breath.push(active.length === 1 ? COLORS[active[0]] : undefined);
+    anim.push(active.length === 1 ? COLORS[active[0]] : undefined);
     legend.push(`m${s + 1}[${INDICATORS.map((ind, i) => `${ind}:${counts[i]}`).join(" ")} of ${statuses.length}]`);
   }
-  return { colors, breath, legend: legend.join(" ") };
+  return { colors, anim, legend: legend.join(" ") };
 }
 
 function render() {
@@ -227,8 +254,8 @@ function render() {
     lastPublished = local;
     hub.publish(JSON.parse(local));
   }
-  const { colors, breath, legend } = frame();
-  const key = JSON.stringify([colors, breath]);
+  const { colors, anim, legend } = frame();
+  const key = JSON.stringify([colors, anim]);
   if (legend !== lastLegend) {
     lastLegend = legend;
     const swatches = colors.map(([r, g, b]) => `\x1b[48;2;${r};${g};${b}m  \x1b[0m`).join(" ");
@@ -237,18 +264,19 @@ function render() {
   if (key === lastFrame) return;
   lastFrame = key;
   lastColors = colors;
-  lastBreath = breath;
-  clearInterval(breathTimer);
-  breathTimer = breath.some(Boolean) ? setInterval(paint, BREATH_TICK_MS) : undefined;
+  lastAnim = anim;
+  clearInterval(animTimer);
+  animTimer = anim.some(Boolean) ? setInterval(paint, ANIMATION_TICK_MS) : undefined;
   paint();
 }
 
-// Static zones as computed, with breathing machines' zones replaced by the current breath of their colour.
+// Static zones as computed, with animating machines' zones replaced by the current animation frame of their colour.
 function paint(force = false) {
-  const k = breathLevel(Date.now());
+  const now = Date.now();
+  const { level } = animationAt(now);
   const colors = lastColors.map((c, z) => {
-    const b = lastBreath[Math.floor(z / slotZones)];
-    return b ? scale(b, k) : c;
+    const b = lastAnim[Math.floor(z / slotZones)];
+    return b ? scale(b, ANIMATION_MIN + (1 - ANIMATION_MIN) * level(now, z % slotZones, slotZones)) : c;
   });
   const key = JSON.stringify(colors);
   if (!force && key === lastShown) return;
