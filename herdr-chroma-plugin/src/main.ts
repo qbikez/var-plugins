@@ -34,6 +34,10 @@ const OFF: Rgb = [0, 0, 0];
 const INDICATORS: AgentStatus[] = ["blocked", "working", "done", "idle"];
 // A lit zone's brightness is the share of the machine's agents in that state, floored so one agent out of many stays visible.
 const MIN_BRIGHTNESS = 0.2;
+// A machine with exactly one active zone breathes that zone's colour over all its zones.
+const BREATH_PERIOD_MS = 4000, BREATH_MIN = 0.1, BREATH_TICK_MS = 100;
+const breathLevel = (now: number) => BREATH_MIN + (1 - BREATH_MIN) * (0.5 - 0.5 * Math.cos((2 * Math.PI * now) / BREATH_PERIOD_MS));
+const scale = (rgb: Rgb, k: number): Rgb => rgb.map((c) => Math.round(c * k)) as Rgb;
 const dim = (rgb: Rgb, share: number): Rgb => {
   const k = MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * share;
   return rgb.map((c) => Math.round(c * k)) as Rgb;
@@ -189,6 +193,10 @@ let keyboard: Keyboard | undefined;
 let hub: HubClient | undefined;
 let remote: Slots = new Map();
 let lastFrame = "";
+let lastColors: Rgb[] = [];
+let lastBreath: (Rgb | undefined)[] = [];
+let lastShown = "";
+let breathTimer: Timer | undefined;
 let lastLegend = "";
 let lastPublished = "";
 
@@ -197,17 +205,20 @@ const localStatuses = () => [...panes.values()].map((p) => p.status).filter((s) 
 
 // Zone z belongs to slot floor(z / slotZones) and lights when any of that machine's agents is in INDICATORS[z % slotZones],
 // brighter the larger their share. Our own slot comes from local state, the others from the hub.
-function frame(): { colors: Rgb[]; legend: string } {
+function frame(): { colors: Rgb[]; breath: (Rgb | undefined)[]; legend: string } {
   const local = localStatuses();
   const colors: Rgb[] = [];
+  const breath: (Rgb | undefined)[] = [];
   const legend: string[] = [];
   for (let s = 0; s < MACHINES; s++) {
     const statuses = s === slot ? local : (remote.get(s) ?? []);
     const counts = INDICATORS.map((ind) => statuses.filter((st) => st === ind).length);
     colors.push(...INDICATORS.map((ind, i) => (counts[i] ? dim(COLORS[ind], counts[i] / statuses.length) : OFF)));
+    const active = INDICATORS.filter((_, i) => counts[i]);
+    breath.push(active.length === 1 ? COLORS[active[0]] : undefined);
     legend.push(`m${s + 1}[${INDICATORS.map((ind, i) => `${ind}:${counts[i]}`).join(" ")} of ${statuses.length}]`);
   }
-  return { colors, legend: legend.join(" ") };
+  return { colors, breath, legend: legend.join(" ") };
 }
 
 function render() {
@@ -216,8 +227,8 @@ function render() {
     lastPublished = local;
     hub.publish(JSON.parse(local));
   }
-  const { colors, legend } = frame();
-  const key = JSON.stringify(colors);
+  const { colors, breath, legend } = frame();
+  const key = JSON.stringify([colors, breath]);
   if (legend !== lastLegend) {
     lastLegend = legend;
     const swatches = colors.map(([r, g, b]) => `\x1b[48;2;${r};${g};${b}m  \x1b[0m`).join(" ");
@@ -225,6 +236,23 @@ function render() {
   }
   if (key === lastFrame) return;
   lastFrame = key;
+  lastColors = colors;
+  lastBreath = breath;
+  clearInterval(breathTimer);
+  breathTimer = breath.some(Boolean) ? setInterval(paint, BREATH_TICK_MS) : undefined;
+  paint();
+}
+
+// Static zones as computed, with breathing machines' zones replaced by the current breath of their colour.
+function paint(force = false) {
+  const k = breathLevel(Date.now());
+  const colors = lastColors.map((c, z) => {
+    const b = lastBreath[Math.floor(z / slotZones)];
+    return b ? scale(b, k) : c;
+  });
+  const key = JSON.stringify(colors);
+  if (!force && key === lastShown) return;
+  lastShown = key;
   show(colors);
 }
 
@@ -254,7 +282,7 @@ async function attach() {
     lastAttachError = "";
     retryDelay = RETRY_MIN_MS;
     console.log("keyboard attached");
-    if (lastFrame) show(JSON.parse(lastFrame));
+    if (lastFrame) paint(true);
   } catch (e) {
     const msg = (e as Error).message;
     if (msg !== lastAttachError) console.log(`keyboard unavailable: ${msg}, retrying`);
@@ -294,7 +322,7 @@ if (!dryRun) {
   await attach();
   setInterval(() => {
     // Keep the keyboard refreshed in case the firmware resets (sleep/wake, replug), and pick it back up after a KVM switch.
-    if (keyboard) lastFrame && show(JSON.parse(lastFrame));
+    if (keyboard) lastFrame && paint(true);
     else attach();
   }, 2000);
 }
