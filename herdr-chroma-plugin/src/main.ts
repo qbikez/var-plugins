@@ -39,31 +39,29 @@ const MIN_BRIGHTNESS = 0.2;
 const ANIMATION_CYCLE_MS = 10_000, ANIMATION_TICK_MS = 100, ANIMATION_MIN = 0.08;
 const wave = (phase: number) => 0.5 - 0.5 * Math.cos(2 * Math.PI * phase);
 const hash = (n: number) => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
-const ANIMATIONS: { name: string; level: (t: number, z: number, n: number) => number }[] = [
-  { name: "breathe", level: (t) => wave(t / 4000) },
-  { name: "wave", level: (t, z, n) => wave(t / 2000 - z / n) },
+type Animation = (t: number, z: number, n: number) => number;
+const ANIMATIONS = {
+  breathe: (t) => wave(t / 4000),
+  wave: (t, z, n) => wave(t / 2000 - z / n),
   // Bounces back and forth with a short trail.
-  { name: "scanner", level: (t, z, n) => {
+  scanner: (t, z, n) => {
     const pos = (n - 1) * (1 - Math.abs(((t / 2400) % 2) - 1));
     return Math.max(0, 1 - Math.abs(z - pos) / 1.5);
-  } },
+  },
   // Two quick beats, then rest.
-  { name: "heartbeat", level: (t) => {
+  heartbeat: (t) => {
     const p = (t % 1400) / 1400;
     return Math.max(Math.exp(-(((p - 0.1) / 0.06) ** 2)), 0.7 * Math.exp(-(((p - 0.3) / 0.06) ** 2)));
-  } },
+  },
   // Each zone flares at its own pseudo-random moments.
-  { name: "twinkle", level: (t, z) => {
+  twinkle: (t, z) => {
     const slot = Math.floor(t / 400);
     return hash(slot * 7 + z) > 0.55 ? 1 - ((t % 400) / 400) : 0;
-  } },
-];
-// Defined but not in the rotation: heartbeat, twinkle.
-const CYCLE = ["breathe", "wave", "scanner"];
-const animationAt = (now: number) => {
-  const name = CYCLE[Math.floor(now / ANIMATION_CYCLE_MS) % CYCLE.length];
-  return ANIMATIONS.find((a) => a.name === name)!;
-};
+  },
+} satisfies Record<string, Animation>;
+// Defined but not in the rotation: heartbeat, twinkle. A name missing from ANIMATIONS fails to compile.
+const CYCLE: (keyof typeof ANIMATIONS)[] = ["breathe", "wave", "scanner"];
+const animationAt = (now: number): Animation => ANIMATIONS[CYCLE[Math.floor(now / ANIMATION_CYCLE_MS) % CYCLE.length]!];
 const scale = (rgb: Rgb, k: number): Rgb => rgb.map((c) => Math.round(c * k)) as Rgb;
 const dim = (rgb: Rgb, share: number): Rgb => {
   const k = MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * share;
@@ -273,7 +271,7 @@ function render() {
 // Static zones as computed, with animating machines' zones replaced by the current animation frame of their colour.
 function paint(force = false) {
   const now = Date.now();
-  const { level } = animationAt(now);
+  const level = animationAt(now);
   const colors = lastColors.map((c, z) => {
     const b = lastAnim[Math.floor(z / slotZones)];
     return b ? scale(b, ANIMATION_MIN + (1 - ANIMATION_MIN) * level(now, z % slotZones, slotZones)) : c;
