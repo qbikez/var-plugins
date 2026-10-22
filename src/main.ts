@@ -10,6 +10,7 @@
 //   machine N: bun src/main.ts --machine N --hub wss://<server>/?token=<secret>
 // --serve honours HUB_TOKEN, and the joining machine then adds ?token=<secret> to its --hub URL.
 import { connect, type Socket } from "node:net";
+import { loadConfig } from "./config";
 import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./razer";
 import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
 
@@ -38,18 +39,22 @@ const socketPath = process.env.HERDR_SOCKET_PATH;
 if (!socketPath) throw new Error("HERDR_SOCKET_PATH not set (run inside herdr)");
 const pipePath = process.platform === "win32" ? `\\\\.\\pipe\\${socketPath}` : socketPath;
 const dryRun = process.argv.includes("--dry-run");
+if (process.platform !== "win32" && !dryRun) throw new Error("keyboard backend is Windows-only (use --dry-run elsewhere)");
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
+// Precedence: CLI flag > config.json in the plugin config dir > default.
+const config = loadConfig();
 const MACHINES = 2;
-const servePort = arg("--serve");
-const hubToken = process.env.HUB_TOKEN;
+const servePort = arg("--serve") ?? (config.serve !== undefined ? String(config.serve) : undefined);
+const hubToken = process.env.HUB_TOKEN ?? config.hubToken;
 const hubUrl =
   arg("--hub") ??
+  config.hub ??
   (servePort && `ws://localhost:${servePort}${hubToken ? `?token=${encodeURIComponent(hubToken)}` : ""}`);
-const slot = Number(arg("--machine") ?? 1) - 1;
+const slot = Number(arg("--machine") ?? config.machine ?? 1) - 1;
 if (!Number.isInteger(slot) || slot < 0 || slot >= MACHINES) throw new Error(`--machine must be 1..${MACHINES}`);
 const slotZones = ZONES / MACHINES;
 
