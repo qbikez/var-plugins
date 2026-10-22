@@ -15,9 +15,9 @@ A zone's brightness is the share of that machine's agents in that state. Two mac
 ## Install
 
 ```sh
-herdr plugin install qbikez/foundry/herdr-chroma-plugin
+herdr plugin install qbikez/var-plugins/herdr-chroma-plugin
 # pin a revision:
-herdr plugin install qbikez/foundry/herdr-chroma-plugin --ref <tag-or-commit>
+herdr plugin install qbikez/var-plugins/herdr-chroma-plugin --ref <tag-or-commit>
 ```
 
 Update with `herdr plugin update qbikez.chroma`. Plugins run unsandboxed with your user's permissions, so read the source before installing.

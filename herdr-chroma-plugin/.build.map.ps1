@@ -4,7 +4,7 @@ $targets = @{
         $cmd = { param($text, $note) Write-Host "  $text" -ForegroundColor Green -NoNewline; Write-Host $(if ($note) { "  $note" }) -ForegroundColor DarkGray }
 
         & $heading "Install (from GitHub)"
-        & $cmd "herdr plugin install qbikez/foundry/herdr-chroma-plugin"
+        & $cmd "herdr plugin install qbikez/var-plugins/herdr-chroma-plugin"
         & $cmd "qbuild install" "from this checkout"
 
         & $heading "Configure (then reopen the daemon pane)"
@@ -62,7 +62,7 @@ $targets = @{
         }
         if ($github) {
             $refArgs = $ref ? @("--ref", $ref) : @()
-            herdr plugin install qbikez/foundry/herdr-chroma-plugin @refArgs
+            herdr plugin install qbikez/var-plugins/herdr-chroma-plugin @refArgs
         }
         else {
             if ($ref) { throw "-ref only applies with -github" }
@@ -78,7 +78,7 @@ $targets = @{
             [switch][bool] $push
         )
         # Bumps package.json + herdr-plugin.toml, commits, and tags `herdr-chroma-v<version>`.
-        # Users install the default branch, or pin the tag: herdr plugin install qbikez/foundry/herdr-chroma-plugin --ref <tag>
+        # Users install the default branch, or pin the tag: herdr plugin install qbikez/var-plugins/herdr-chroma-plugin --ref <tag>
         # Nothing leaves the machine unless -push is given.
         Push-Location $PSScriptRoot
         try {
