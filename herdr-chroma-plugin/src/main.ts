@@ -260,17 +260,17 @@ const orderOf = (label: string | undefined) => {
 
 // Every known agent on this machine. The "agent" strategy maps position to zone, so the order must be stable:
 // by workspace number, then pane order (the sort is stable). Peers receive the order as the array order.
-const localStatuses = () =>
-  [...panes.values()]
-    .filter((p) => p.status !== "unknown")
-    .map((p) => {
+const localAgents = () =>
+  [...panes.entries()]
+    .filter(([, p]) => p.status !== "unknown")
+    .map(([id, p]) => {
       const status = p.doneAway ? "done" : p.status;
       const label = workspaceLabels.get(p.workspaceId ?? "");
       const pin = pinOf(label);
-      return { entry: pin === undefined ? status : `${status}@${pin}`, order: orderOf(label) };
+      return { id, workspaceId: p.workspaceId, entry: pin === undefined ? status : `${status}@${pin}`, order: orderOf(label) };
     })
-    .sort((a, b) => (a.order === b.order ? 0 : a.order < b.order ? -1 : 1))
-    .map((a) => a.entry);
+    .sort((a, b) => (a.order === b.order ? 0 : a.order < b.order ? -1 : 1));
+const localStatuses = () => localAgents().map((a) => a.entry);
 
 interface Layout { colors: Rgb[]; anim: Rgb | undefined; legend: string }
 
@@ -295,19 +295,25 @@ function summarise(statuses: string[]): Rgb {
 // "agent": the first slotZones - 1 zones are one per agent, the last summarises the rest. Agents in a workspace pinned to
 // one of those zones (see pinOf) share it, summarised; the other agents fill the zones left free, in order.
 function byAgent(entries: string[]): Layout {
-  const own = slotZones - 1;
   const agents = entries.map(decode);
-  const groups: string[][] = Array.from({ length: own }, () => []);
-  const floating: string[] = [];
-  for (const { status, pin } of agents) (pin !== undefined && pin < own ? groups[pin]! : floating).push(status);
-  const free = groups.flatMap((g, z) => (g.length ? [] : [z]));
-  const overflow = floating.splice(free.length);
-  free.forEach((z, i) => floating[i] && groups[z]!.push(floating[i]!));
+  const zones = assignZones(entries);
+  const groups: string[][] = Array.from({ length: slotZones }, () => []);
+  agents.forEach((a, i) => groups[zones[i]!]!.push(a.status));
   return {
-    colors: [...groups.map(summarise), summarise(overflow)],
+    colors: groups.map(summarise),
     anim: undefined,
     legend: agents.length ? agents.map((a) => (a.pin === undefined ? a.status : `${a.status}@z${a.pin}`)).join(",") : "none",
   };
+}
+
+// The zone (0..slotZones - 1, the last being the summary zone) of each entry in the "agent" strategy.
+function assignZones(entries: string[]): number[] {
+  const own = slotZones - 1;
+  const agents = entries.map(decode);
+  const claimed = new Set(agents.flatMap((a) => (a.pin !== undefined && a.pin < own ? [a.pin] : [])));
+  const free = Array.from({ length: own }, (_, z) => z).filter((z) => !claimed.has(z));
+  let next = 0;
+  return agents.map((a) => (a.pin !== undefined && a.pin < own ? a.pin : (free[next++] ?? own)));
 }
 const STRATEGIES = { status: byStatus, agent: byAgent };
 
@@ -326,7 +332,83 @@ function frame(): { colors: Rgb[]; anim: (Rgb | undefined)[]; legend: string } {
   return { colors, anim, legend: legend.join(" ") };
 }
 
+// The "agent" strategy tells herdr which zone each agent and workspace maps to, as a `chroma_zone` metadata token written in the
+// chosen zoneLabels set. Show it with $chroma_zone in ui.sidebar.agents.rows / ui.sidebar.spaces.rows.
+const ZONE_TOKEN = "chroma_zone", TOKEN_SOURCE = "chroma";
+// How a machine's zones (0..slotZones - 1) are written. `label` names one zone; `join` names a workspace's several zones.
+interface ZoneLabels { label: (zone: number) => string; join: (zones: number[]) => string }
+const listed = (labels: string[], sep: string): ZoneLabels => ({
+  label: (z) => labels[z] ?? String(z),
+  join: (zones) => zones.map((z) => labels[z] ?? String(z)).join(sep),
+});
+const strip = (on: string, off: string): ZoneLabels => {
+  const draw = (zones: number[]) => Array.from({ length: slotZones }, (_, i) => (zones.includes(i) ? on : off)).join("");
+  return { label: (z) => draw([z]), join: draw };
+};
+const BRAILLE_DOTS = [0x01, 0x02, 0x04, 0x40];
+const ZONE_LABELS = {
+  // 0️⃣ 1️⃣ 2️⃣ 3️⃣, i.e. digit + variation selector + combining keycap.
+  emoji: listed([0, 1, 2, 3].map((z) => `${z}️⃣`), ""),
+  digits: listed(["0", "1", "2", "3"], ","),
+  letters: listed(["A", "B", "C", "D"], ","),
+  // A strip of the machine's zones with the mapped ones marked, e.g. --#- for zone 2 and #--# for a workspace spanning 0 and 3.
+  bar: strip("#", "-"),
+  dots: strip("●", "○"),
+  squares: strip("■", "□"),
+  // Growing: zone 0 is a quarter, zone 3 a full circle / a full-height bar / a full-width bar.
+  pie: listed(["◔", "◑", "◕", "●"], ""),
+  blocks: listed(["▂", "▄", "▆", "█"], ""),
+  fill: listed(["▎", "▌", "▊", "█"], ""),
+  // One braille cell with a dot per zone (⠁ ⠂ ⠄ ⡀), so a workspace spanning zones is still a single character.
+  braille: {
+    label: (z) => String.fromCodePoint(0x2800 | BRAILLE_DOTS[z]!),
+    join: (zones) => String.fromCodePoint(0x2800 | zones.reduce((bits, z) => bits | BRAILLE_DOTS[z]!, 0)),
+  },
+} satisfies Record<string, ZoneLabels>;
+const zoneLabelsName = arg("--zone-labels") ?? config.zoneLabels ?? "emoji";
+if (!(zoneLabelsName in ZONE_LABELS)) throw new Error(`--zone-labels must be one of ${Object.keys(ZONE_LABELS).join(", ")}, got ${zoneLabelsName}`);
+const zoneLabels = ZONE_LABELS[zoneLabelsName as keyof typeof ZONE_LABELS];
+const sentTokens = new Map<string, string>();
+
+// Returns once herdr has answered every report (or 2 s have passed). `clear` withdraws all tokens, for shutdown.
+function syncZoneTokens(clear = false): Promise<void> {
+  const want = new Map<string, string>();
+  if (strategy === "agent" && !clear) {
+    const agents = localAgents();
+    const zones = assignZones(agents.map((a) => a.entry));
+    const byWorkspace = new Map<string, Set<number>>();
+    agents.forEach((a, i) => {
+      want.set(`pane:${a.id}`, zoneLabels.label(zones[i]!));
+      if (a.workspaceId) byWorkspace.set(a.workspaceId, (byWorkspace.get(a.workspaceId) ?? new Set()).add(zones[i]!));
+    });
+    for (const [id, set] of byWorkspace) want.set(`workspace:${id}`, zoneLabels.join([...set].sort()));
+  }
+  const reports: { method: string; params: object }[] = [];
+  const report = (key: string, value: string | null) => {
+    const [kind, id] = key.split(/:(.*)/) as [string, string];
+    reports.push({ method: `${kind}.report_metadata`, params: { [`${kind}_id`]: id, source: TOKEN_SOURCE, tokens: { [ZONE_TOKEN]: value } } });
+  };
+  for (const [key, value] of want) if (sentTokens.get(key) !== value) report(key, value);
+  for (const key of sentTokens.keys()) if (!want.has(key)) report(key, null);
+  sentTokens.clear();
+  for (const [key, value] of want) sentTokens.set(key, value);
+  if (!reports.length || dryRun) return Promise.resolve();
+  // One request per connection, like snapshot(): herdr only answers the first request on a connection.
+  // A report for a pane that has just closed is refused; nothing to do about that.
+  const send = async (r: (typeof reports)[number], i: number) => {
+    let resolveAnswer!: () => void;
+    const answer = new Promise<void>((res) => (resolveAnswer = res));
+    const sock = await open(() => resolveAnswer());
+    request(sock, `zone_${i}`, r.method, r.params);
+    await answer;
+    sock.end();
+  };
+  const timeout = new Promise<void>((res) => setTimeout(res, 2000));
+  return Promise.race([Promise.allSettled(reports.map(send)).then(() => {}), timeout]);
+}
+
 function render() {
+  if (strategy === "agent") syncZoneTokens();
   const local = JSON.stringify(localStatuses());
   if (hub && local !== lastPublished) {
     lastPublished = local;
@@ -407,6 +489,7 @@ async function shutdown(reason: string) {
   if (stopping) return;
   stopping = true;
   console.log(`stopping: ${reason}`);
+  if (strategy === "agent") await syncZoneTokens(true);
   subscription?.end();
   hub?.close();
   await keyboard?.close();

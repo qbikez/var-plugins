@@ -13,6 +13,8 @@ export interface Config {
   mqttTopic?: string;
   // How agents map to a machine's zones: "status" (default, one zone per status) or "agent" (one zone per agent).
   strategy?: string;
+  // How the zone token is written for the "agent" strategy: emoji (default), digits, letters, bar, dots, squares, pie, blocks, fill or braille.
+  zoneLabels?: string;
 }
 
 export function configPath(): string | undefined {
