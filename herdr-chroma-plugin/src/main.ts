@@ -375,7 +375,10 @@ const ZONE_LABELS = {
   "nf-letters": glyphs([0xf0b08, 0xf0b09, 0xf0b0a, 0xf0b0b]), // alpha_{a..d}_box
   "nf-dice": glyphs([0xf01ca, 0xf01cb, 0xf01cc, 0xf01cd]), // dice_{1..4}
   "nf-pie": glyphs([0xf0a9f, 0xf0aa1, 0xf0aa3, 0xf0aa5]), // circle_slice_{2,4,6,8}: a quarter up to full
-  "nf-battery": glyphs([0xf007c, 0xf007e, 0xf0080, 0xf0082]), // battery_{30,50,70,90}
+  // The first key of each of the keyboard's 8 zones (Esc F1 F3 F5 | F7 F9 F11 Ins), for this machine's half.
+  // Nerd Fonts has no Insert key, so md-plus_box stands in for it.
+  "nf-keys": glyphs([0xf12b7, 0xf12ab, 0xf12ad, 0xf12af, 0xf12b1, 0xf12b3, 0xf12b5, 0xf0416].slice(slot * slotZones, (slot + 1) * slotZones)),
+  "nf-battery":glyphs([0xf007c, 0xf007e, 0xf0080, 0xf0082]), // battery_{30,50,70,90}
   // One braille cell with a dot per zone (⠁ ⠂ ⠄ ⡀), so a workspace spanning zones is still a single character.
   braille: {
     label: (z) => String.fromCodePoint(0x2800 | BRAILLE_DOTS[z]!),

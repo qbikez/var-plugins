@@ -115,6 +115,7 @@ Nerd Font sets (Nerd Fonts v3 or newer, Material Design icons; a workspace spann
 | `nf-letters` | 󰬈 󰬉 󰬊 󰬋 | `alpha_a..d_box` |
 | `nf-dice` | 󰇊 󰇋 󰇌 󰇍 | `dice_1..4` (faces 1–4 for zones 0–3) |
 | `nf-pie` | 󰪟 󰪡 󰪣 󰪥 | `circle_slice_2,4,6,8` (a quarter up to full) |
+| `nf-keys` | machine 1: 󱊷 󱊫 󱊭 󱊯, machine 2: 󱊱 󱊳 󱊵 󰐖 | `keyboard_esc`, `keyboard_f1/f3/f5/f7/f9/f11`, `plus_box` (no Insert glyph exists): the first key of each zone, Esc F1 F3 F5 and F7 F9 F11 Ins |
 | `nf-battery` | 󰁼 󰁾 󰂀 󰂂 | `battery_30,50,70,90` |
 
 `pie`, `blocks` and `fill` grow with the zone number, so they read as position left to right but not as a set of zones; the strips (`bar`, `dots`, `squares`) and `braille` show exactly which zones a workspace spans. The non-ASCII sets need a font with the Unicode block and geometric-shape glyphs (braille especially).
