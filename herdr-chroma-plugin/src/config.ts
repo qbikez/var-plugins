@@ -17,6 +17,8 @@ export interface Config {
   zoneLabels?: string;
   // How the "agent" strategy orders unpinned agents: "number" (default, by the number in the workspace name) or "herdr" (herdr's workspace order).
   spaceOrder?: string;
+  // What takes a zone in the "agent" strategy: "agent" (default, one zone per agent) or "space" (one zone per workspace, shared by its agents).
+  grouping?: string;
 }
 
 export function configPath(): string | undefined {

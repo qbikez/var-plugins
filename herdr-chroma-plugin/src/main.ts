@@ -38,6 +38,8 @@ const COLORS: Record<AgentStatus, Rgb> = {
 const OFF: Rgb = [0, 0, 0];
 // "agent" strategy's summary zone when the remaining non-idle agents are in different states.
 const MIXED: Rgb = [255, 0, 140];
+// ...except working + done, which gets its own colour between their blue and green.
+const WORKING_DONE: Rgb = [0, 200, 200];
 // What each zone of a machine's half indicates, left → right.
 const INDICATORS: AgentStatus[] = ["blocked", "working", "done", "idle"];
 // A lit zone's brightness is the share of the machine's agents in that state, floored so one agent out of many stays visible.
@@ -106,6 +108,10 @@ const strategy: "status" | "agent" = strategyName;
 // How the "agent" strategy orders unpinned agents: by the number in the workspace name, or in herdr's own workspace order.
 const spaceOrder = arg("--space-order") ?? config.spaceOrder ?? "number";
 if (spaceOrder !== "number" && spaceOrder !== "herdr") throw new Error(`--space-order must be number or herdr, got ${spaceOrder}`);
+
+// "agent" strategy grouping: one zone per agent (default), or one zone per workspace, shared by all its agents.
+const grouping = arg("--grouping") ?? config.grouping ?? "agent";
+if (grouping !== "agent" && grouping !== "space") throw new Error(`--grouping must be agent or space, got ${grouping}`);
 
 const panes = new Map<string, Pane>();
 
@@ -255,10 +261,11 @@ const pinOf = (label: string | undefined) => {
   const m = /z(\d)/i.exec(label ?? "");
   return m ? Number(m[1]) : undefined;
 };
-// Entries are synced between machines as "status" or "status@pin".
+// Entries are synced between machines as "status", "status@pin", with "#workspace" appended when grouping by space.
 const decode = (entry: string) => {
-  const [status, pin] = entry.split("@");
-  return { status: status!, pin: pin === undefined ? undefined : Number(pin) };
+  const [rest, group] = entry.split("#") as [string, string | undefined];
+  const [status, pin] = rest.split("@");
+  return { status: status!, pin: pin === undefined ? undefined : Number(pin), group };
 };
 
 // The first number in a workspace label orders the agents that aren't pinned; workspaces without one come last.
@@ -276,7 +283,8 @@ const localAgents = () =>
       const status = p.doneAway ? "done" : p.status;
       const label = workspaceLabels.get(p.workspaceId ?? "");
       const pin = pinOf(label);
-      return { id, workspaceId: p.workspaceId, entry: pin === undefined ? status : `${status}@${pin}`, order: spaceOrder === "herdr" ? (workspaceNumbers.get(p.workspaceId ?? "") ?? Infinity) : orderOf(label) };
+      const group = grouping === "space" && p.workspaceId ? `#${p.workspaceId}` : "";
+      return { id, workspaceId: p.workspaceId, entry: `${status}${pin === undefined ? "" : `@${pin}`}${group}`, order: spaceOrder === "herdr" ? (workspaceNumbers.get(p.workspaceId ?? "") ?? Infinity) : orderOf(label) };
     })
     .sort((a, b) => (a.order === b.order ? 0 : a.order < b.order ? -1 : 1));
 const localStatuses = () => localAgents().map((a) => a.entry);
@@ -295,13 +303,13 @@ function byStatus(entries: string[]): Layout {
   };
 }
 
-// Idle agents are ignored unless that's all there is; a single non-idle status shows as itself, a mix shows MIXED.
+// Idle agents are ignored unless that's all there is; a single non-idle status shows as itself, a mix shows MIXED (working + done has its own colour).
 function summarise(statuses: string[]): Rgb {
   const busy = new Set(statuses.filter((s) => s !== "idle"));
-  return !statuses.length ? OFF : !busy.size ? COLORS.idle : busy.size === 1 ? COLORS[[...busy][0] as AgentStatus] : MIXED;
+  return !statuses.length ? OFF : !busy.size ? COLORS.idle : busy.size === 1 ? COLORS[[...busy][0] as AgentStatus] : busy.size === 2 && busy.has("working") && busy.has("done") ? WORKING_DONE : MIXED;
 }
 
-// "agent": the first slotZones - 1 zones are one per agent, the last summarises the rest. Agents in a workspace pinned to
+// "agent": the first slotZones - 1 zones are one per agent (or per workspace with grouping "space"), the last summarises the rest. Agents in a workspace pinned to
 // one of those zones (see pinOf) share it, summarised; the other agents fill the zones left free, in order.
 function byAgent(entries: string[]): Layout {
   const agents = entries.map(decode);
@@ -316,13 +324,22 @@ function byAgent(entries: string[]): Layout {
 }
 
 // The zone (0..slotZones - 1, the last being the summary zone) of each entry in the "agent" strategy.
+// Entries of one workspace (grouping "space") form a single unit that takes one zone.
 function assignZones(entries: string[]): number[] {
   const own = slotZones - 1;
   const agents = entries.map(decode);
-  const claimed = new Set(agents.flatMap((a) => (a.pin !== undefined && a.pin < own ? [a.pin] : [])));
+  const unitOf = (a: ReturnType<typeof decode>, i: number) => a.group ?? `agent:${i}`;
+  const pins = new Map<string, number | undefined>();
+  agents.forEach((a, i) => {
+    const u = unitOf(a, i);
+    pins.set(u, pins.get(u) ?? (a.pin !== undefined && a.pin < own ? a.pin : undefined));
+  });
+  const claimed = new Set([...pins.values()].filter((p) => p !== undefined));
   const free = Array.from({ length: own }, (_, z) => z).filter((z) => !claimed.has(z));
+  const zoneOf = new Map<string, number>();
   let next = 0;
-  return agents.map((a) => (a.pin !== undefined && a.pin < own ? a.pin : (free[next++] ?? own)));
+  for (const [u, pin] of pins) zoneOf.set(u, pin ?? free[next++] ?? own);
+  return agents.map((a, i) => zoneOf.get(unitOf(a, i))!);
 }
 const STRATEGIES = { status: byStatus, agent: byAgent };
 

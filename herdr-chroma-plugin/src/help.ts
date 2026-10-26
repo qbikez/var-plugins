@@ -28,5 +28,6 @@ Config keys:
   strategy  status (default: one zone per status) or agent (first 3 agents get a zone each, the 4th summarises the rest)
   zoneLabels how the $chroma_zone token is written: emoji (default, 1️⃣), digits, letters, bar, dots, squares, pie, blocks, fill, braille, or the Nerd Font sets nf-* (see README)
   spaceOrder agent strategy: order unpinned workspaces by number in their name (default) or herdr (as listed in herdr)
+  grouping  agent strategy: agent (default, one zone per agent) or space (one zone per workspace, shared by its agents)
 
 Config changes apply when the daemon pane is reopened.`);
