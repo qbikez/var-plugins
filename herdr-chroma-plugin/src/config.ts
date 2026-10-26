@@ -15,6 +15,8 @@ export interface Config {
   strategy?: string;
   // How the zone token is written for the "agent" strategy: emoji (default), digits, letters, bar, dots, squares, pie, blocks, fill, braille or nf-box, nf-circle, nf-letters, nf-dice, nf-pie, nf-battery (Nerd Font).
   zoneLabels?: string;
+  // How the "agent" strategy orders unpinned agents: "number" (default, by the number in the workspace name) or "herdr" (herdr's workspace order).
+  spaceOrder?: string;
 }
 
 export function configPath(): string | undefined {

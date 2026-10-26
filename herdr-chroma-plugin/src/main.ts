@@ -24,6 +24,8 @@ type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 interface Pane { agent?: string; status: AgentStatus; doneAway?: boolean; workspaceId?: string }
 // Workspace labels by id, refreshed on every resync (a rename shows up at the next pane creation).
 const workspaceLabels = new Map<string, string>();
+// Workspace positions in herdr's sidebar, 1-based.
+const workspaceNumbers = new Map<string, number>();
 
 // No white or grey: white is reserved for spotting the keyboard's default (Synapse) state.
 const COLORS: Record<AgentStatus, Rgb> = {
@@ -101,6 +103,9 @@ const slotZones = ZONES / MACHINES;
 const strategyName = arg("--strategy") ?? config.strategy ?? "status";
 if (strategyName !== "status" && strategyName !== "agent") throw new Error(`--strategy must be status or agent, got ${strategyName}`);
 const strategy: "status" | "agent" = strategyName;
+// How the "agent" strategy orders unpinned agents: by the number in the workspace name, or in herdr's own workspace order.
+const spaceOrder = arg("--space-order") ?? config.spaceOrder ?? "number";
+if (spaceOrder !== "number" && spaceOrder !== "herdr") throw new Error(`--space-order must be number or herdr, got ${spaceOrder}`);
 
 const panes = new Map<string, Pane>();
 
@@ -148,7 +153,11 @@ async function resync() {
   const snap = await snapshot();
   const live = new Set<string>();
   workspaceLabels.clear();
-  for (const w of snap.workspaces ?? []) workspaceLabels.set(w.workspace_id, w.label);
+  workspaceNumbers.clear();
+  for (const w of snap.workspaces ?? []) {
+    workspaceLabels.set(w.workspace_id, w.label);
+    workspaceNumbers.set(w.workspace_id, w.number);
+  }
   for (const p of snap.panes) {
     live.add(p.pane_id);
     setPane(p.pane_id, p.agent, p.agent_status, p.workspace_id);
@@ -267,7 +276,7 @@ const localAgents = () =>
       const status = p.doneAway ? "done" : p.status;
       const label = workspaceLabels.get(p.workspaceId ?? "");
       const pin = pinOf(label);
-      return { id, workspaceId: p.workspaceId, entry: pin === undefined ? status : `${status}@${pin}`, order: orderOf(label) };
+      return { id, workspaceId: p.workspaceId, entry: pin === undefined ? status : `${status}@${pin}`, order: spaceOrder === "herdr" ? (workspaceNumbers.get(p.workspaceId ?? "") ?? Infinity) : orderOf(label) };
     })
     .sort((a, b) => (a.order === b.order ? 0 : a.order < b.order ? -1 : 1));
 const localStatuses = () => localAgents().map((a) => a.entry);
