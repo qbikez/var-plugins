@@ -26,6 +26,6 @@ Config keys:
   mqtt      sync through an MQTT broker instead of a hub, mqtt(s)://user:pass@host:port
   mqttTopic topic prefix for mqtt (default herdr-chroma)
   strategy  status (default: one zone per status) or agent (first 3 agents get a zone each, the 4th summarises the rest)
-  zoneLabels how the $chroma_zone token is written: emoji (default, 1️⃣), digits, letters, bar, dots, squares, pie, blocks, fill or braille (see README)
+  zoneLabels how the $chroma_zone token is written: emoji (default, 1️⃣), digits, letters, bar, dots, squares, pie, blocks, fill, braille, or the Nerd Font sets nf-* (see README)
 
 Config changes apply when the daemon pane is reopened.`);

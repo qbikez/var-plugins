@@ -106,6 +106,17 @@ How the zone is written is set by `zoneLabels` (or `--zone-labels`):
 | `fill` | ▎ ▌ ▊ █ | ▎█ |
 | `braille` | ⠁ ⠂ ⠄ ⡀ | ⡁ (one cell, a dot per zone) |
 
+Nerd Font sets (Nerd Fonts v3 or newer, Material Design icons; a workspace spanning several zones shows each glyph, space-separated):
+
+| `zoneLabels` | zone 0 … 3 | glyphs |
+|---|---|---|
+| `nf-box` | 󰎡 󰎤 󰎧 󰎪 | `numeric_0..3_box` |
+| `nf-circle` | 󰲞 󰲠 󰲢 󰲤 | `numeric_0..3_circle` |
+| `nf-letters` | 󰬈 󰬉 󰬊 󰬋 | `alpha_a..d_box` |
+| `nf-dice` | 󰇊 󰇋 󰇌 󰇍 | `dice_1..4` (faces 1–4 for zones 0–3) |
+| `nf-pie` | 󰪟 󰪡 󰪣 󰪥 | `circle_slice_2,4,6,8` (a quarter up to full) |
+| `nf-battery` | 󰁼 󰁾 󰂀 󰂂 | `battery_30,50,70,90` |
+
 `pie`, `blocks` and `fill` grow with the zone number, so they read as position left to right but not as a set of zones; the strips (`bar`, `dots`, `squares`) and `braille` show exactly which zones a workspace spans. The non-ASCII sets need a font with the Unicode block and geometric-shape glyphs (braille especially).
 
 ### MQTT sync

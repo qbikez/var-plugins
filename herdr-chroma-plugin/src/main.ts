@@ -345,6 +345,7 @@ const strip = (on: string, off: string): ZoneLabels => {
   const draw = (zones: number[]) => Array.from({ length: slotZones }, (_, i) => (zones.includes(i) ? on : off)).join("");
   return { label: (z) => draw([z]), join: draw };
 };
+const glyphs = (codepoints: number[]) => listed(codepoints.map((c) => String.fromCodePoint(c)), " ");
 const BRAILLE_DOTS = [0x01, 0x02, 0x04, 0x40];
 const ZONE_LABELS = {
   // 0️⃣ 1️⃣ 2️⃣ 3️⃣, i.e. digit + variation selector + combining keycap.
@@ -359,6 +360,13 @@ const ZONE_LABELS = {
   pie: listed(["◔", "◑", "◕", "●"], ""),
   blocks: listed(["▂", "▄", "▆", "█"], ""),
   fill: listed(["▎", "▌", "▊", "█"], ""),
+  // Nerd Font (v3+) Material Design glyphs, codepoints from nerd-fonts' glyphnames.json.
+  "nf-box": glyphs([0xf03a1, 0xf03a4, 0xf03a7, 0xf03aa]), // numeric_{0..3}_box
+  "nf-circle": glyphs([0xf0c9e, 0xf0ca0, 0xf0ca2, 0xf0ca4]), // numeric_{0..3}_circle
+  "nf-letters": glyphs([0xf0b08, 0xf0b09, 0xf0b0a, 0xf0b0b]), // alpha_{a..d}_box
+  "nf-dice": glyphs([0xf01ca, 0xf01cb, 0xf01cc, 0xf01cd]), // dice_{1..4}
+  "nf-pie": glyphs([0xf0a9f, 0xf0aa1, 0xf0aa3, 0xf0aa5]), // circle_slice_{2,4,6,8}: a quarter up to full
+  "nf-battery": glyphs([0xf007c, 0xf007e, 0xf0080, 0xf0082]), // battery_{30,50,70,90}
   // One braille cell with a dot per zone (⠁ ⠂ ⠄ ⡀), so a workspace spanning zones is still a single character.
   braille: {
     label: (z) => String.fromCodePoint(0x2800 | BRAILLE_DOTS[z]!),
