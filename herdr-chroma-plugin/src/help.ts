@@ -25,5 +25,6 @@ Config keys:
   hubToken  token for serve (also read from HUB_TOKEN)
   mqtt      sync through an MQTT broker instead of a hub, mqtt(s)://user:pass@host:port
   mqttTopic topic prefix for mqtt (default herdr-chroma)
+  strategy  status (default: one zone per status) or agent (first 3 agents get a zone each, the 4th summarises the rest)
 
 Config changes apply when the daemon pane is reopened.`);

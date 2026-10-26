@@ -21,7 +21,9 @@ import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
 type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 // doneAway: the agent finished while the keyboard was away (KVM switched to another machine). herdr marks a finished agent
 // in the focused pane as seen straight away, since it can't tell we left, so it reports idle; we show it as done until we're back.
-interface Pane { agent?: string; status: AgentStatus; doneAway?: boolean }
+interface Pane { agent?: string; status: AgentStatus; doneAway?: boolean; workspaceId?: string }
+// Workspace labels by id, refreshed on every resync (a rename shows up at the next pane creation).
+const workspaceLabels = new Map<string, string>();
 
 // No white or grey: white is reserved for spotting the keyboard's default (Synapse) state.
 const COLORS: Record<AgentStatus, Rgb> = {
@@ -32,6 +34,8 @@ const COLORS: Record<AgentStatus, Rgb> = {
   unknown: [0, 0, 0],
 };
 const OFF: Rgb = [0, 0, 0];
+// "agent" strategy's summary zone when the remaining non-idle agents are in different states.
+const MIXED: Rgb = [255, 0, 140];
 // What each zone of a machine's half indicates, left → right.
 const INDICATORS: AgentStatus[] = ["blocked", "working", "done", "idle"];
 // A lit zone's brightness is the share of the machine's agents in that state, floored so one agent out of many stays visible.
@@ -94,6 +98,9 @@ const mqttTopic = arg("--mqtt-topic") ?? config.mqttTopic;
 const slot = Number(arg("--machine") ?? config.machine ?? 1) - 1;
 if (!Number.isInteger(slot) || slot < 0 || slot >= MACHINES) throw new Error(`--machine must be 1..${MACHINES}`);
 const slotZones = ZONES / MACHINES;
+const strategyName = arg("--strategy") ?? config.strategy ?? "status";
+if (strategyName !== "status" && strategyName !== "agent") throw new Error(`--strategy must be status or agent, got ${strategyName}`);
+const strategy: "status" | "agent" = strategyName;
 
 const panes = new Map<string, Pane>();
 
@@ -140,9 +147,11 @@ let subSeq = 0;
 async function resync() {
   const snap = await snapshot();
   const live = new Set<string>();
+  workspaceLabels.clear();
+  for (const w of snap.workspaces ?? []) workspaceLabels.set(w.workspace_id, w.label);
   for (const p of snap.panes) {
     live.add(p.pane_id);
-    setPane(p.pane_id, p.agent, p.agent_status);
+    setPane(p.pane_id, p.agent, p.agent_status, p.workspace_id);
   }
   for (const id of [...panes.keys()]) if (!live.has(id)) removePane(id);
   render();
@@ -179,9 +188,10 @@ function scheduleResync() {
 
 // --- state -----------------------------------------------------------------
 
-function setPane(id: string, agent: string | undefined, status: AgentStatus = "unknown") {
+function setPane(id: string, agent: string | undefined, status: AgentStatus = "unknown", workspaceId?: string) {
   const pane = panes.get(id) ?? { status: "unknown" };
   pane.agent = agent ?? pane.agent;
+  pane.workspaceId = workspaceId ?? pane.workspaceId;
   if (status !== "idle") pane.doneAway = false;
   else if (!pane.doneAway && (pane.status === "working" || pane.status === "blocked") && isAway()) pane.doneAway = true;
   pane.status = status;
@@ -195,7 +205,7 @@ function removePane(id: string) {
 function onEvent(kind: string, data: any) {
   switch (kind) {
     case "pane_created":
-      setPane(data.pane.pane_id, data.pane.agent, data.pane.agent_status);
+      setPane(data.pane.pane_id, data.pane.agent, data.pane.agent_status, data.pane.workspace_id);
       scheduleResync();
       break;
     case "pane_closed":
@@ -231,23 +241,87 @@ let animTimer: Timer | undefined;
 let lastLegend = "";
 let lastPublished = "";
 
-// Every known agent status on this machine, sorted so unchanged state publishes identically.
-const localStatuses = () => [...panes.values()].map((p) => (p.doneAway ? "done" : p.status)).filter((s) => s !== "unknown").sort();
+// A workspace named like "api z2" pins its agents to zone 2 (0-based, within the machine's own zones) in the "agent" strategy.
+const pinOf = (label: string | undefined) => {
+  const m = /z(\d)/i.exec(label ?? "");
+  return m ? Number(m[1]) : undefined;
+};
+// Entries are synced between machines as "status" or "status@pin".
+const decode = (entry: string) => {
+  const [status, pin] = entry.split("@");
+  return { status: status!, pin: pin === undefined ? undefined : Number(pin) };
+};
 
-// Zone z belongs to slot floor(z / slotZones) and lights when any of that machine's agents is in INDICATORS[z % slotZones],
-// brighter the larger their share. Our own slot comes from local state, the others from the hub.
+// The first number in a workspace label orders the agents that aren't pinned; workspaces without one come last.
+const orderOf = (label: string | undefined) => {
+  const m = /\d+/.exec(label ?? "");
+  return m ? Number(m[0]) : Infinity;
+};
+
+// Every known agent on this machine. The "agent" strategy maps position to zone, so the order must be stable:
+// by workspace number, then pane order (the sort is stable). Peers receive the order as the array order.
+const localStatuses = () =>
+  [...panes.values()]
+    .filter((p) => p.status !== "unknown")
+    .map((p) => {
+      const status = p.doneAway ? "done" : p.status;
+      const label = workspaceLabels.get(p.workspaceId ?? "");
+      const pin = pinOf(label);
+      return { entry: pin === undefined ? status : `${status}@${pin}`, order: orderOf(label) };
+    })
+    .sort((a, b) => (a.order === b.order ? 0 : a.order < b.order ? -1 : 1))
+    .map((a) => a.entry);
+
+interface Layout { colors: Rgb[]; anim: Rgb | undefined; legend: string }
+
+// "status": zone i lights when any of the machine's agents is in INDICATORS[i], brighter the larger their share.
+function byStatus(entries: string[]): Layout {
+  const statuses = entries.map((e) => decode(e).status);
+  const counts = INDICATORS.map((ind) => statuses.filter((st) => st === ind).length);
+  const active = INDICATORS.filter((_, i) => counts[i]);
+  return {
+    colors: INDICATORS.map((ind, i) => (counts[i] ? dim(COLORS[ind], counts[i] / statuses.length) : OFF)),
+    anim: active.length === 1 ? COLORS[active[0]] : undefined,
+    legend: `${INDICATORS.map((ind, i) => `${ind}:${counts[i]}`).join(" ")} of ${statuses.length}`,
+  };
+}
+
+// Idle agents are ignored unless that's all there is; a single non-idle status shows as itself, a mix shows MIXED.
+function summarise(statuses: string[]): Rgb {
+  const busy = new Set(statuses.filter((s) => s !== "idle"));
+  return !statuses.length ? OFF : !busy.size ? COLORS.idle : busy.size === 1 ? COLORS[[...busy][0] as AgentStatus] : MIXED;
+}
+
+// "agent": the first slotZones - 1 zones are one per agent, the last summarises the rest. Agents in a workspace pinned to
+// one of those zones (see pinOf) share it, summarised; the other agents fill the zones left free, in order.
+function byAgent(entries: string[]): Layout {
+  const own = slotZones - 1;
+  const agents = entries.map(decode);
+  const groups: string[][] = Array.from({ length: own }, () => []);
+  const floating: string[] = [];
+  for (const { status, pin } of agents) (pin !== undefined && pin < own ? groups[pin]! : floating).push(status);
+  const free = groups.flatMap((g, z) => (g.length ? [] : [z]));
+  const overflow = floating.splice(free.length);
+  free.forEach((z, i) => floating[i] && groups[z]!.push(floating[i]!));
+  return {
+    colors: [...groups.map(summarise), summarise(overflow)],
+    anim: undefined,
+    legend: agents.length ? agents.map((a) => (a.pin === undefined ? a.status : `${a.status}@z${a.pin}`)).join(",") : "none",
+  };
+}
+const STRATEGIES = { status: byStatus, agent: byAgent };
+
+// Slot s owns zones s * slotZones onward. Our own slot comes from local state, the others from the hub.
 function frame(): { colors: Rgb[]; anim: (Rgb | undefined)[]; legend: string } {
   const local = localStatuses();
   const colors: Rgb[] = [];
   const anim: (Rgb | undefined)[] = [];
   const legend: string[] = [];
   for (let s = 0; s < MACHINES; s++) {
-    const statuses = s === slot ? local : (remote.get(s) ?? []);
-    const counts = INDICATORS.map((ind) => statuses.filter((st) => st === ind).length);
-    colors.push(...INDICATORS.map((ind, i) => (counts[i] ? dim(COLORS[ind], counts[i] / statuses.length) : OFF)));
-    const active = INDICATORS.filter((_, i) => counts[i]);
-    anim.push(active.length === 1 ? COLORS[active[0]] : undefined);
-    legend.push(`m${s + 1}[${INDICATORS.map((ind, i) => `${ind}:${counts[i]}`).join(" ")} of ${statuses.length}]`);
+    const layout = STRATEGIES[strategy](s === slot ? local : (remote.get(s) ?? []));
+    colors.push(...layout.colors);
+    anim.push(layout.anim);
+    legend.push(`m${s + 1}[${layout.legend}]`);
   }
   return { colors, anim, legend: legend.join(" ") };
 }

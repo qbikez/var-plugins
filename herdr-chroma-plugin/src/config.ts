@@ -11,6 +11,8 @@ export interface Config {
   // Alternative to hub/serve: sync through an MQTT broker, e.g. "mqtts://user:pass@host:8883".
   mqtt?: string;
   mqttTopic?: string;
+  // How agents map to a machine's zones: "status" (default, one zone per status) or "agent" (one zone per agent).
+  strategy?: string;
 }
 
 export function configPath(): string | undefined {

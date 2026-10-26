@@ -5,7 +5,7 @@
 // Changes apply the next time the daemon pane is opened.
 import { configPath, loadConfig, saveConfig, type Config } from "./config";
 
-const KEYS = ["machine", "hub", "serve", "hubToken", "mqtt", "mqttTopic"] as const;
+const KEYS = ["machine", "hub", "serve", "hubToken", "mqtt", "mqttTopic", "strategy"] as const;
 type Key = (typeof KEYS)[number];
 const isKey = (k: string | undefined): k is Key => KEYS.includes(k as Key);
 

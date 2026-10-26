@@ -73,6 +73,12 @@ Both write `config.json` in the plugin config dir (`herdr plugin config-dir qbik
 | `hubToken` | token for `serve` (also read from `HUB_TOKEN`) |
 | `mqtt` | sync through an MQTT broker instead of a hub, `mqtt(s)://user:pass@host:port` |
 | `mqttTopic` | topic prefix for `mqtt` (default `herdr-chroma`) |
+| `strategy` | `status` (default) or `agent`, also `--strategy` |
+
+### Strategies
+
+- `status`: each of a machine's 4 zones is a status indicator (blocked, working, done, idle), brighter the more agents share it.
+- `agent`: the first 3 zones are one per agent and the 4th summarises the rest, ignoring idle agents unless all are idle. One non-idle status shows its own colour; a mix shows magenta. A workspace whose name contains `z0`–`z2` pins its agents to that zone (0-based, within the machine's zones); several agents in one pinned zone are summarised the same way. The remaining agents fill the free zones ordered by the first number in their workspace name (workspaces without a number come last, in pane order).
 
 ### MQTT sync
 
