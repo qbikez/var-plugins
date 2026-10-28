@@ -20,7 +20,7 @@ Config (from the plugin folder, or bun <plugin dir>/src/configure.ts):
 
 Config keys:
   machine   1 (zones 0-3) or 2 (zones 4-7)
-  device    keyboard driver: razer-ornata or royal-kludge (default: auto-detect)
+  device    keyboard driver(s): razer-ornata and/or royal-kludge, comma-separated (default: all detected)
   serve     host the sync hub on this port
   hub       join a hub, ws(s)://host:port/?token=...
   hubToken  token for serve (also read from HUB_TOKEN)
