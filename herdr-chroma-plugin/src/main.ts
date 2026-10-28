@@ -1,4 +1,4 @@
-// Phase 1 end-to-end slice: herdr agent status → Ornata V3 TKL zones.
+// Phase 1 end-to-end slice: herdr agent status → keyboard zones (see src/devices for the supported keyboards).
 // Each machine owns half the keyboard (machine 1 → zones 0–3, machine 2 → 4–7), lit as indicators over all its agents:
 // any blocked, any working, any done, any idle.
 // Usage: bun src/main.ts [--dry-run]   (run inside herdr; --dry-run prints frames instead of lighting the keyboard)
@@ -15,7 +15,7 @@
 import { connect, type Socket } from "node:net";
 import { loadConfig } from "./config";
 import { joinMqtt } from "./mqtt";
-import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./razer";
+import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./devices";
 import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
 
 type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
@@ -102,6 +102,8 @@ const mqttTopic = arg("--mqtt-topic") ?? config.mqttTopic;
 const slot = Number(arg("--machine") ?? config.machine ?? 1) - 1;
 if (!Number.isInteger(slot) || slot < 0 || slot >= MACHINES) throw new Error(`--machine must be 1..${MACHINES}`);
 const slotZones = ZONES / MACHINES;
+// Which keyboard driver to use (see src/devices); unset = the first supported keyboard that's plugged in.
+const device = arg("--device") ?? config.device;
 const strategyName = arg("--strategy") ?? config.strategy ?? "status";
 if (strategyName !== "status" && strategyName !== "agent") throw new Error(`--strategy must be status or agent, got ${strategyName}`);
 const strategy: "status" | "agent" = strategyName;
@@ -467,12 +469,13 @@ function render() {
   paint();
 }
 
-// Static zones as computed, with animating machines' zones replaced by the current animation frame of their colour.
+// Static zones as computed, with animating machines' zones replaced by the current animation frame of their colour
+// (unless the keyboard can't animate, then they stay static and the ticks dedup to nothing).
 function paint(force = false) {
   const now = Date.now();
   const level = animationAt(now);
   const colors = lastColors.map((c, z) => {
-    const b = lastAnim[Math.floor(z / slotZones)];
+    const b = keyboard?.animate === false ? undefined : lastAnim[Math.floor(z / slotZones)];
     return b ? scale(b, ANIMATION_MIN + (1 - ANIMATION_MIN) * level(now, z % slotZones, slotZones)) : c;
   });
   const key = JSON.stringify(colors);
@@ -503,10 +506,10 @@ async function attach() {
   if (keyboard || attaching || stopping || Date.now() < nextAttachAt) return;
   attaching = true;
   try {
-    keyboard = await openKeyboard();
+    keyboard = await openKeyboard({ device, zones: config.zones });
     lastAttachError = "";
     retryDelay = RETRY_MIN_MS;
-    console.log("keyboard attached");
+    console.log(`keyboard attached: ${keyboard.name}`);
     for (const pane of panes.values()) pane.doneAway = false;
     render();
     if (lastFrame) paint(true);

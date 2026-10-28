@@ -1,7 +1,7 @@
 id = "qbikez.chroma"
 name = "Chroma"
 version = "0.1.0"
-description = "Shows herdr agent states (blocked / working / done / idle) on a Razer Ornata V3 TKL keyboard"
+description = "Shows herdr agent states (blocked / working / done / idle) on a Razer Ornata V3 TKL or Royal Kludge keyboard"
 min_herdr_version = "0.9.3"
 platforms = ["windows"]
 

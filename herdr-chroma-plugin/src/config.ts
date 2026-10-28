@@ -19,6 +19,10 @@ export interface Config {
   spaceOrder?: string;
   // What takes a zone in the "agent" strategy: "agent" (default, one zone per agent) or "space" (one zone per workspace, shared by its agents).
   grouping?: string;
+  // Keyboard driver: "razer-ornata" or "royal-kludge"; unset = auto-detect.
+  device?: string;
+  // Per-key keyboards: the key names each of the 8 zones lights, e.g. [["ESC", "1"], ["2", "3"], ...]; unset = 8 vertical strips.
+  zones?: string[][];
 }
 
 export function configPath(): string | undefined {

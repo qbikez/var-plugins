@@ -1,6 +1,6 @@
 # herdr-chroma
 
-A [herdr](https://herdr.dev) plugin that shows your agents' states on a Razer keyboard.
+A [herdr](https://herdr.dev) plugin that shows your agents' states on a Razer or Royal Kludge keyboard.
 
 Each machine owns four lighting zones, left to right: **blocked** (amber), **working** (blue), **done** (green), **idle** (purple).
 A zone's brightness is the share of that machine's agents in that state. Two machines sharing one keyboard through a KVM can sync through a websocket hub (zones 0–3 and 4–7).
@@ -8,9 +8,20 @@ A zone's brightness is the share of that machine's agents in that state. Two mac
 ## Requirements
 
 - Windows
-- Razer Ornata V3 TKL (VID `0x1532`, PID `0x02A3` are hardcoded) with Razer Synapse 4
+- A supported keyboard (see below)
 - herdr 0.9.3 or newer
 - [Bun](https://bun.sh) on `PATH`
+
+## Supported keyboards
+
+The first supported keyboard that's plugged in is used; set `device` to force one.
+
+| `device` | Keyboard | Notes |
+| --- | --- | --- |
+| `razer-ornata` | Razer Ornata V3 TKL (VID `0x1532`, PID `0x02A3`) | Needs Razer Synapse 4. 8 hardware zones. |
+| `royal-kludge` | Royal Kludge per-key RGB over USB (VID `0x258A`); RK-S70 (PID `0x01D9`) tested | Per-key: zones map to keys (see `zones`). Doesn't animate (every update makes the LEDs blink). |
+
+Other Royal Kludge models can be added by copying their `KB.ini` from the RK software (`Dev/<PID>/KB.ini`, also in [kludgeknight](https://github.com/vinc3m1/kludgeknight/tree/main/public/rk/Dev)) to `src/devices/rk/<PID>.ini`.
 
 ## Install
 
@@ -74,6 +85,18 @@ Both write `config.json` in the plugin config dir (`herdr plugin config-dir qbik
 | `mqtt` | sync through an MQTT broker instead of a hub, `mqtt(s)://user:pass@host:port` |
 | `mqttTopic` | topic prefix for `mqtt` (default `herdr-chroma`) |
 | `strategy` | `status` (default) or `agent`, also `--strategy` |
+| `device` | keyboard driver, `razer-ornata` or `royal-kludge` (default: auto-detect), also `--device` |
+| `zones` | per-key keyboards: the keys each of the 8 zones lights (default: 8 vertical strips) |
+
+### Zones on per-key keyboards
+
+By default the keyboard is split into 8 vertical strips, left to right. To light only some keys, list them per zone in `config.json` (8 lists, zones 0–7; keys not listed stay off):
+
+```json
+{ "zones": [["ESC"], ["1", "2"], ["Q", "W"], ["A", "S"], ["SPACE"], ["ENTER"], ["UP", "DOWN", "LEFT", "RIGHT"], ["BACKSPACE"]] }
+```
+
+Key names follow the US layout whatever the keycaps say (on a German board, Ö is `;`). An unknown name stops the daemon with the list of names the keyboard has.
 
 ### Strategies
 
@@ -128,7 +151,7 @@ Instead of a hub, every instance can publish its state to an MQTT broker and lis
 bun src/configure.ts set mqtt "mqtts://user:pass@broker.example.com:8883"
 ```
 
-CLI flags (`--machine`, `--serve`, `--hub`, `--mqtt`, `--mqtt-topic`, `--dry-run`) override the file. A standalone hub for a server: `bun src/hub.ts --port 7777`.
+CLI flags (`--machine`, `--device`, `--serve`, `--hub`, `--mqtt`, `--mqtt-topic`, `--dry-run`) override the file. A standalone hub for a server: `bun src/hub.ts --port 7777`.
 
 ## Syncing two machines
 
@@ -152,7 +175,7 @@ CLI flags (`--machine`, `--serve`, `--hub`, `--mqtt`, `--mqtt-topic`, `--dry-run
 ## Limitations
 
 - The daemon stops if herdr closes its event pipe; reopen the pane after restarting herdr.
-- Windows and one keyboard model only.
+- Windows only, and one Razer model (the Ornata V3 TKL).
 
 ## Development
 

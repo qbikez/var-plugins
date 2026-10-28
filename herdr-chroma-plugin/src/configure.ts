@@ -1,11 +1,11 @@
 // Edits config.json in the plugin config dir without hand-writing JSON.
 // Usage: bun src/configure.ts [show]
-//        bun src/configure.ts set <machine|hub|serve|hubToken|mqtt|mqttTopic> <value>
+//        bun src/configure.ts set <machine|device|hub|serve|hubToken|mqtt|mqttTopic> <value>
 //        bun src/configure.ts unset <key>
 // Changes apply the next time the daemon pane is opened.
 import { configPath, loadConfig, saveConfig, type Config } from "./config";
 
-const KEYS = ["machine", "hub", "serve", "hubToken", "mqtt", "mqttTopic", "strategy", "zoneLabels", "spaceOrder", "grouping"] as const;
+const KEYS = ["machine", "hub", "serve", "hubToken", "mqtt", "mqttTopic", "strategy", "zoneLabels", "spaceOrder", "grouping", "device"] as const;
 type Key = (typeof KEYS)[number];
 const isKey = (k: string | undefined): k is Key => KEYS.includes(k as Key);
 
