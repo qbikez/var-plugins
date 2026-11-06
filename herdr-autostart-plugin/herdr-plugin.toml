@@ -1,0 +1,45 @@
+id = "qbikez.autostart"
+name = "Autostart"
+version = "0.1.0"
+description = "Starts a configured list of commands when herdr starts, and stops them when herdr exits"
+min_herdr_version = "0.9.3"
+platforms = ["windows", "linux", "macos"]
+
+# Requires Bun (https://bun.sh) on PATH; this also fails the install early if it is missing.
+[[build]]
+command = ["bun", "install", "--frozen-lockfile"]
+
+# Startup hooks are one-shot, so this detaches a small supervisor (src/supervisor.ts) that runs the commands from
+# config.yaml and stops them when herdr closes its event pipe.
+[[startup]]
+command = ["bun", "src/cli.ts", "start"]
+
+[[actions]]
+id = "restart"
+title = "Autostart: restart all commands (re-reads config.yaml)"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/cli.ts", "start"]
+
+[[actions]]
+id = "stop"
+title = "Autostart: stop all commands"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/cli.ts", "stop"]
+
+[[actions]]
+id = "status"
+title = "Autostart: show command status"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/cli.ts", "status"]
+
+[[actions]]
+id = "log"
+title = "Autostart: show the supervisor log"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/cli.ts", "log"]
+
+[[actions]]
+id = "config"
+title = "Autostart: show config.yaml"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/cli.ts", "config"]
