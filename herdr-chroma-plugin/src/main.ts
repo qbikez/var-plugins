@@ -14,6 +14,7 @@
 //   machine N: bun src/main.ts --machine N --mqtt mqtts://user:pass@broker:8883 [--mqtt-topic herdr-chroma]
 import { connect, type Socket } from "node:net";
 import { loadConfig } from "./config";
+import { claim } from "./instance";
 import { joinMqtt } from "./mqtt";
 import { openKeyboard, ZONES, type Keyboard, type Rgb } from "./devices";
 import { joinHub, serveHub, type HubClient, type Slots } from "./sync";
@@ -77,6 +78,12 @@ const dim = (rgb: Rgb, share: number): Rgb => {
   const k = MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * share;
   return rgb.map((c) => Math.round(c * k)) as Rgb;
 };
+
+// Timestamp every line: in the background the output goes to daemon.log (see src/start.ts).
+for (const level of ["log", "error"] as const) {
+  const write = console[level];
+  console[level] = (...args: unknown[]) => write(new Date().toISOString(), ...args);
+}
 
 const socketPath = process.env.HERDR_SOCKET_PATH;
 if (!socketPath) throw new Error("HERDR_SOCKET_PATH not set (run inside herdr)");
@@ -458,7 +465,7 @@ function render() {
   if (legend !== lastLegend) {
     lastLegend = legend;
     const swatches = colors.map(([r, g, b]) => `\x1b[48;2;${r};${g};${b}m  \x1b[0m`).join(" ");
-    console.log(`${new Date().toISOString()} ${swatches}  ${legend}`);
+    console.log(`${swatches}  ${legend}`);
   }
   if (key === lastFrame) return;
   lastFrame = key;
@@ -550,6 +557,8 @@ if (mqttUrl) {
   if (hubUrl) hub = joinHub(hubUrl, slot, onSlots);
 }
 if (!dryRun) {
+  // Only one daemon drives the keyboard: this one replaces any already running (background or pane).
+  if (process.env.HERDR_PLUGIN_STATE_DIR) await claim();
   await attach();
   setInterval(() => {
     // Keep the keyboard refreshed in case the firmware resets (sleep/wake, replug), and pick it back up after a KVM switch.

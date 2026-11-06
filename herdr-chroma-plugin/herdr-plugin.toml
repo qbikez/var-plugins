@@ -9,15 +9,20 @@ platforms = ["windows"]
 [[build]]
 command = ["bun", "install", "--frozen-lockfile"]
 
-# The daemon is long-running, so it lives in a pane. We might switch to a [[startup]] hook at some
-# point, if herdr startup hooks start supporting resident processes (today they are one-shot).
+# Starts the daemon in the background when herdr starts. Startup hooks are one-shot, so src/start.ts detaches the
+# daemon (logging to daemon.log in the plugin state dir) and exits; the daemon stops when herdr closes its event pipe.
+# Set "autostart": false in config.json to skip it.
+[[startup]]
+command = ["bun", "src/start.ts"]
+
+# The daemon in a pane, to watch it live. It replaces the background daemon (and vice versa).
 [[panes]]
 id = "daemon"
 title = "Chroma keyboard"
 placement = "tab"
 command = ["bun", "src/main.ts"]
 
-# Which half of the keyboard this machine owns (see README). Takes effect when the daemon pane is reopened.
+# Which half of the keyboard this machine owns (see README). Takes effect when the daemon restarts (restart action).
 [[actions]]
 id = "machine-1"
 title = "Chroma: this is machine 1 (zones 0-3)"
@@ -35,6 +40,18 @@ id = "open"
 title = "Open Chroma keyboard daemon"
 contexts = ["workspace"]
 command = ["herdr", "plugin", "pane", "open", "--plugin", "qbikez.chroma", "--entrypoint", "daemon"]
+
+[[actions]]
+id = "restart"
+title = "Chroma: restart the keyboard daemon in the background"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/start.ts"]
+
+[[actions]]
+id = "log"
+title = "Chroma: show the background daemon's log"
+contexts = ["workspace", "tab", "pane", "global"]
+command = ["bun", "src/log.ts"]
 
 [[actions]]
 id = "help"

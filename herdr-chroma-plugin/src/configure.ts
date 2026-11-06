@@ -2,10 +2,10 @@
 // Usage: bun src/configure.ts [show]
 //        bun src/configure.ts set <machine|device|hub|serve|hubToken|mqtt|mqttTopic> <value>
 //        bun src/configure.ts unset <key>
-// Changes apply the next time the daemon pane is opened.
+// Changes apply when the daemon restarts (herdr plugin action invoke qbikez.chroma.restart).
 import { configPath, loadConfig, saveConfig, type Config } from "./config";
 
-const KEYS = ["machine", "hub", "serve", "hubToken", "mqtt", "mqttTopic", "strategy", "zoneLabels", "spaceOrder", "grouping", "device"] as const;
+const KEYS = ["machine", "hub", "serve", "hubToken", "mqtt", "mqttTopic", "strategy", "zoneLabels", "spaceOrder", "grouping", "device", "autostart"] as const;
 type Key = (typeof KEYS)[number];
 const isKey = (k: string | undefined): k is Key => KEYS.includes(k as Key);
 
@@ -22,18 +22,21 @@ switch (cmd) {
       const n = Number(value);
       if (!Number.isInteger(n) || n < 1 || (key === "machine" && n > 2)) fail(`${key} must be ${key === "machine" ? "1 or 2" : "a port number"}`);
       (config as any)[key] = n;
+    } else if (key === "autostart") {
+      if (value !== "true" && value !== "false") fail("autostart must be true or false");
+      config.autostart = value === "true";
     } else {
       (config as any)[key] = value;
     }
     saveConfig(config);
-    console.log(`${key} = ${JSON.stringify((config as any)[key])} (restart the daemon pane to apply)`);
+    console.log(`${key} = ${JSON.stringify((config as any)[key])} (restart the daemon to apply: herdr plugin action invoke qbikez.chroma.restart)`);
     break;
   }
   case "unset":
     if (!isKey(key)) fail(`usage: unset <${KEYS.join("|")}>`);
     delete config[key];
     saveConfig(config);
-    console.log(`${key} unset (restart the daemon pane to apply)`);
+    console.log(`${key} unset (restart the daemon to apply: herdr plugin action invoke qbikez.chroma.restart)`);
     break;
   default:
     fail("usage: bun src/configure.ts [show | set <key> <value> | unset <key>]");

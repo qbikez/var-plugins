@@ -4,12 +4,16 @@
 console.log(`Chroma keyboard plugin (qbikez.chroma): shows herdr agent states on a Razer or Royal Kludge keyboard.
 
 Actions (herdr plugin action invoke qbikez.chroma.<action>):
-  open       Open the keyboard daemon pane (workspace)
+  restart    (Re)start the keyboard daemon in the background
+  log        Show the background daemon's log file and its last lines
+  open       Open the keyboard daemon in a pane, replacing the background one (workspace)
   machine-1  This machine owns zones 0-3 (default)
   machine-2  This machine owns zones 4-7
   help       Show this help
 
 Daemon:
+  Starts in the background with herdr (unless "autostart": false), logging to daemon.log in the plugin state dir.
+  herdr plugin action invoke qbikez.chroma.log
   herdr plugin pane open --plugin qbikez.chroma --entrypoint daemon
   herdr plugin log list --plugin qbikez.chroma
 
@@ -31,5 +35,6 @@ Config keys:
   spaceOrder agent strategy: order unpinned workspaces by number in their name (default) or herdr (as listed in herdr)
   grouping  agent strategy: agent (default, one zone per agent) or space (one zone per workspace, shared by its agents)
   zones     per-key keyboards: key names lit by each of the 8 zones, edited in config.json (see README)
+  autostart true (default) or false: start the daemon in the background when herdr starts
 
-Config changes apply when the daemon pane is reopened.`);
+Config changes apply when the daemon restarts (restart action).`);

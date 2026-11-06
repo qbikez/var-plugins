@@ -23,6 +23,8 @@ export interface Config {
   device?: string;
   // Per-key keyboards: the key names each of the 8 zones lights, e.g. [["ESC", "1"], ["2", "3"], ...]; unset = 8 vertical strips.
   zones?: string[][];
+  // Start the daemon in the background when herdr starts (default true; see src/start.ts).
+  autostart?: boolean;
 }
 
 export function configPath(): string | undefined {

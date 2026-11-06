@@ -35,7 +35,18 @@ Update with `herdr plugin update qbikez.chroma`. Plugins run unsandboxed with yo
 
 ## Use
 
-Open the daemon pane (it opens in its own tab) and leave it running:
+The daemon starts in the background when herdr starts (a `[[startup]]` hook) and stops with it. It writes to `daemon.log` in the plugin state dir (`%LOCALAPPDATA%\herdr\plugins\qbikez.chroma`); the previous run's log is kept as `daemon.log.1`. To print the log's path and its last lines:
+
+```sh
+herdr plugin action invoke qbikez.chroma.log
+herdr plugin log list --plugin qbikez.chroma
+```
+
+The second command shows the action's output, along with the startup hook's (it reports a daemon that failed to start).
+
+Restart the daemon after changing the config with `herdr plugin action invoke qbikez.chroma.restart`. To turn off starting with herdr, set `"autostart": false` in `config.json`.
+
+To watch it live, open the daemon in a pane (in its own tab), which replaces the background daemon:
 
 ```sh
 herdr plugin pane open --plugin qbikez.chroma --entrypoint daemon
@@ -51,13 +62,13 @@ command = "qbikez.chroma.open"
 description = "chroma keyboard"
 ```
 
-Logs: `herdr plugin log list --plugin qbikez.chroma`.
+Closing the pane stops the daemon; run the `restart` action to bring it back in the background. Only one daemon runs at a time: a newly started one stops the one already running.
 
 Help: `herdr plugin action invoke qbikez.chroma.help` lists the actions and config commands.
 
 ## Configuration
 
-Set which machine this is (1 = zones 0–3, 2 = zones 4–7), then reopen the daemon pane:
+Set which machine this is (1 = zones 0–3, 2 = zones 4–7), then restart the daemon (`qbikez.chroma.restart`):
 
 ```sh
 herdr plugin action invoke qbikez.chroma.machine-2
@@ -87,6 +98,7 @@ Both write `config.json` in the plugin config dir (`herdr plugin config-dir qbik
 | `strategy` | `status` (default) or `agent`, also `--strategy` |
 | `device` | keyboard driver, `razer-ornata` or `royal-kludge` (default: auto-detect), also `--device` |
 | `zones` | per-key keyboards: the keys each of the 8 zones lights (default: 8 vertical strips) |
+| `autostart` | start the daemon in the background when herdr starts (default `true`) |
 
 ### Zones on per-key keyboards
 
@@ -170,11 +182,11 @@ CLI flags (`--machine`, `--device`, `--serve`, `--hub`, `--mqtt`, `--mqtt-topic`
 
    Use `ws://` instead of `wss://` if there is no TLS proxy in front of the hub.
 3. Give each machine its own number, `qbikez.chroma.machine-1` or `qbikez.chroma.machine-2` (see above), so they light different zones.
-4. Reopen the daemon pane on each machine.
+4. Restart the daemon on each machine (`qbikez.chroma.restart`).
 
 ## Limitations
 
-- The daemon stops if herdr closes its event pipe; reopen the pane after restarting herdr.
+- The daemon stops if herdr closes its event pipe. It comes back the next time herdr starts, or with the `restart` action.
 - Windows only, and one Razer model (the Ornata V3 TKL).
 
 ## Development
