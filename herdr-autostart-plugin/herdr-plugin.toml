@@ -1,6 +1,6 @@
 id = "qbikez.autostart"
 name = "Autostart"
-version = "0.1.1"
+version = "0.1.2"
 description = "Starts a configured list of commands when herdr starts, and stops them when herdr exits"
 min_herdr_version = "0.9.3"
 platforms = ["windows", "linux", "macos"]
