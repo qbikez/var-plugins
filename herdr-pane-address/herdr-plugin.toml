@@ -1,4 +1,4 @@
-id = "local.pane-address"
+id = "qbikez.pane-address"
 name = "Pane address"
 version = "0.1.0"
 min_herdr_version = "0.9.3"
